@@ -1,0 +1,2129 @@
+### Nginx 学习笔记
+
+#### 第一章 初识Nginx
+
+##### Nginx的主要应用场景
+
+![1560318007614](assets/1560318007614.png)
+
+##### Nginx出现原因
+
+![1560318131934](assets/1560318131934.png)
+
+##### Nginx 的优点
+
+![1560318195780](assets/1560318195780.png)
+
+##### Nginx 的组成
+
+![1560318317942](assets/1560318317942.png)
+
+##### Nginx的版本发布
+
+![1560318494065](assets/1560318494065.png)
+
+##### Nginx源码编译
+
+```
+源码目录结构：
+[root@localhost nginx-1.16.0]# ls
+auto  CHANGES  CHANGES.ru  conf  configure  contrib  html  LICENSE  man  README  src
+[root@localhost auto]# ls	## 此目录主要是辅助编译的脚本	
+## cc 编译使用的目录
+## os 用于操作系统的判断使用
+cc      endianness  have          headers  init     lib   module   nohave   os       stubs    threads  unix
+define  feature     have_headers  include  install  make  modules  options  sources  summary  types
+
+[root@localhost vim]# pwd
+/usr/local/src/nginx-1.16.0/contrib/vim		## 主要用于配置文件vim打开的时候 颜色显示
+[root@localhost vim]# ls
+ftdetect  ftplugin  indent  syntax
+
+[root@localhost src]# ls	## nginx 的源码目录
+core  event  http  mail  misc  os  stream
+```
+
+```
+查看nginx 的configure 支持哪些编译参数
+[root@localhost nginx-1.16.0]# ./configure --help
+
+  --help                             print this message
+## 此类事指定安装目录，第三方模块目录，配置文件目录，pid,nginx.lock 目录等
+  --prefix=PATH                      set installation prefix
+  --sbin-path=PATH                   set nginx binary pathname
+  --modules-path=PATH                set modules path
+  --conf-path=PATH                   set nginx.conf pathname
+  --error-log-path=PATH              set error log pathname
+  --pid-path=PATH                    set nginx.pid pathname
+  --lock-path=PATH                   set nginx.lock pathname
+
+  --user=USER                        set non-privileged user for
+                                     worker processes
+  --group=GROUP                      set non-privileged group for
+                                     worker processes
+
+  --build=NAME                       set build name
+  --builddir=DIR                     set build directory
+
+## --with 模块打头的表示默认的不会编译进nginx，默认不开启
+  --with-select_module               enable select module
+  --without-select_module            disable select module
+  --with-poll_module                 enable poll module
+  --without-poll_module              disable poll module
+
+  --with-threads                     enable thread pool support
+
+  --with-file-aio                    enable file AIO support
+
+  --with-http_ssl_module             enable ngx_http_ssl_module
+  --with-http_v2_module              enable ngx_http_v2_module
+  --with-http_realip_module          enable ngx_http_realip_module
+  --with-http_addition_module        enable ngx_http_addition_module
+  --with-http_xslt_module            enable ngx_http_xslt_module
+  --with-http_xslt_module=dynamic    enable dynamic ngx_http_xslt_module
+  --with-http_image_filter_module    enable ngx_http_image_filter_module
+  --with-http_image_filter_module=dynamic
+                                     enable dynamic ngx_http_image_filter_module
+  --with-http_geoip_module           enable ngx_http_geoip_module
+  --with-http_geoip_module=dynamic   enable dynamic ngx_http_geoip_module
+  --with-http_sub_module             enable ngx_http_sub_module
+  --with-http_dav_module             enable ngx_http_dav_module
+  --with-http_flv_module             enable ngx_http_flv_module
+  --with-http_mp4_module             enable ngx_http_mp4_module
+  --with-http_gunzip_module          enable ngx_http_gunzip_module
+  --with-http_gzip_static_module     enable ngx_http_gzip_static_module
+  --with-http_auth_request_module    enable ngx_http_auth_request_module
+  --with-http_random_index_module    enable ngx_http_random_index_module
+  --with-http_secure_link_module     enable ngx_http_secure_link_module
+  --with-http_degradation_module     enable ngx_http_degradation_module
+  --with-http_slice_module           enable ngx_http_slice_module
+  --with-http_stub_status_module     enable ngx_http_stub_status_module
+
+## --without 用于disable 一些模块，不进行编译
+  --without-http_charset_module      disable ngx_http_charset_module
+  --without-http_gzip_module         disable ngx_http_gzip_module
+  --without-http_ssi_module          disable ngx_http_ssi_module
+  --without-http_userid_module       disable ngx_http_userid_module
+  --without-http_access_module       disable ngx_http_access_module
+  --without-http_auth_basic_module   disable ngx_http_auth_basic_module
+  --without-http_mirror_module       disable ngx_http_mirror_module
+  --without-http_autoindex_module    disable ngx_http_autoindex_module
+  --without-http_geo_module          disable ngx_http_geo_module
+  --without-http_map_module          disable ngx_http_map_module
+  --without-http_split_clients_module disable ngx_http_split_clients_module
+  --without-http_referer_module      disable ngx_http_referer_module
+  --without-http_rewrite_module      disable ngx_http_rewrite_module
+  --without-http_proxy_module        disable ngx_http_proxy_module
+  --without-http_fastcgi_module      disable ngx_http_fastcgi_module
+  --without-http_uwsgi_module        disable ngx_http_uwsgi_module
+  --without-http_scgi_module         disable ngx_http_scgi_module
+  --without-http_grpc_module         disable ngx_http_grpc_module
+  --without-http_memcached_module    disable ngx_http_memcached_module
+  --without-http_limit_conn_module   disable ngx_http_limit_conn_module
+  --without-http_limit_req_module    disable ngx_http_limit_req_module
+  --without-http_empty_gif_module    disable ngx_http_empty_gif_module
+  --without-http_browser_module      disable ngx_http_browser_module
+  --without-http_upstream_hash_module
+                                     disable ngx_http_upstream_hash_module
+  --without-http_upstream_ip_hash_module
+                                     disable ngx_http_upstream_ip_hash_module
+  --without-http_upstream_least_conn_module
+                                     disable ngx_http_upstream_least_conn_module
+  --without-http_upstream_random_module
+                                     disable ngx_http_upstream_random_module
+  --without-http_upstream_keepalive_module
+                                     disable ngx_http_upstream_keepalive_module
+  --without-http_upstream_zone_module
+                                     disable ngx_http_upstream_zone_module
+
+  --with-http_perl_module            enable ngx_http_perl_module
+  --with-http_perl_module=dynamic    enable dynamic ngx_http_perl_module
+  --with-perl_modules_path=PATH      set Perl modules path
+  --with-perl=PATH                   set perl binary pathname
+
+  --http-log-path=PATH               set http access log pathname
+  --http-client-body-temp-path=PATH  set path to store
+                                     http client request body temporary files
+  --http-proxy-temp-path=PATH        set path to store
+                                     http proxy temporary files
+  --http-fastcgi-temp-path=PATH      set path to store
+                                     http fastcgi temporary files
+  --http-uwsgi-temp-path=PATH        set path to store
+                                     http uwsgi temporary files
+  --http-scgi-temp-path=PATH         set path to store
+                                     http scgi temporary files
+
+  --without-http                     disable HTTP server
+  --without-http-cache               disable HTTP cache
+
+  --with-mail                        enable POP3/IMAP4/SMTP proxy module
+  --with-mail=dynamic                enable dynamic POP3/IMAP4/SMTP proxy module
+  --with-mail_ssl_module             enable ngx_mail_ssl_module
+  --without-mail_pop3_module         disable ngx_mail_pop3_module
+  --without-mail_imap_module         disable ngx_mail_imap_module
+  --without-mail_smtp_module         disable ngx_mail_smtp_module
+
+  --with-stream                      enable TCP/UDP proxy module
+  --with-stream=dynamic              enable dynamic TCP/UDP proxy module
+  --with-stream_ssl_module           enable ngx_stream_ssl_module
+  --with-stream_realip_module        enable ngx_stream_realip_module
+  --with-stream_geoip_module         enable ngx_stream_geoip_module
+  --with-stream_geoip_module=dynamic enable dynamic ngx_stream_geoip_module
+  --with-stream_ssl_preread_module   enable ngx_stream_ssl_preread_module
+  --without-stream_limit_conn_module disable ngx_stream_limit_conn_module
+  --without-stream_access_module     disable ngx_stream_access_module
+  --without-stream_geo_module        disable ngx_stream_geo_module
+  --without-stream_map_module        disable ngx_stream_map_module
+  --without-stream_split_clients_module
+                                     disable ngx_stream_split_clients_module
+  --without-stream_return_module     disable ngx_stream_return_module
+  --without-stream_upstream_hash_module
+                                     disable ngx_stream_upstream_hash_module
+  --without-stream_upstream_least_conn_module
+                                     disable ngx_stream_upstream_least_conn_module
+  --without-stream_upstream_random_module
+                                     disable ngx_stream_upstream_random_module
+  --without-stream_upstream_zone_module
+                                     disable ngx_stream_upstream_zone_module
+
+  --with-google_perftools_module     enable ngx_google_perftools_module
+  --with-cpp_test_module             enable ngx_cpp_test_module
+
+  --add-module=PATH                  enable external module
+  --add-dynamic-module=PATH          enable dynamic external module
+
+  --with-compat                      dynamic modules compatibility
+
+  --with-cc=PATH                     set C compiler pathname
+  --with-cpp=PATH                    set C preprocessor pathname
+  --with-cc-opt=OPTIONS              set additional C compiler options
+  --with-ld-opt=OPTIONS              set additional linker options
+  --with-cpu-opt=CPU                 build for the specified CPU, valid values:
+                                     pentium, pentiumpro, pentium3, pentium4,
+                                     athlon, opteron, sparc32, sparc64, ppc64
+
+  --without-pcre                     disable PCRE library usage
+  --with-pcre                        force PCRE library usage
+  --with-pcre=DIR                    set path to PCRE library sources
+  --with-pcre-opt=OPTIONS            set additional build options for PCRE
+  --with-pcre-jit                    build PCRE with JIT compilation support
+
+  --with-zlib=DIR                    set path to zlib library sources
+  --with-zlib-opt=OPTIONS            set additional build options for zlib
+  --with-zlib-asm=CPU                use zlib assembler sources optimized
+                                     for the specified CPU, valid values:
+                                     pentium, pentiumpro
+
+  --with-libatomic                   force libatomic_ops library usage
+  --with-libatomic=DIR               set path to libatomic_ops library sources
+
+  --with-openssl=DIR                 set path to OpenSSL library sources
+  --with-openssl-opt=OPTIONS         set additional build options for OpenSSL
+
+  --with-debug                       enable debug logging
+
+## 进行编译
+[root@localhost nginx-1.16.0]# ./configure --prefix=/usr/local/nginx
+…………
+编译完成
+Configuration summary
+  + using system PCRE library
+  + OpenSSL library is not used
+  + using system zlib library
+
+  nginx path prefix: "/usr/local/nginx"
+  nginx binary file: "/usr/local/nginx/sbin/nginx"
+  nginx modules path: "/usr/local/nginx/modules"
+  nginx configuration prefix: "/usr/local/nginx/conf"
+  nginx configuration file: "/usr/local/nginx/conf/nginx.conf"
+  nginx pid file: "/usr/local/nginx/logs/nginx.pid"
+  nginx error log file: "/usr/local/nginx/logs/error.log"
+  nginx http access log file: "/usr/local/nginx/logs/access.log"
+  nginx http client request body temporary files: "client_body_temp"
+  nginx http proxy temporary files: "proxy_temp"
+  nginx http fastcgi temporary files: "fastcgi_temp"
+  nginx http uwsgi temporary files: "uwsgi_temp"
+  nginx http scgi temporary files: "scgi_temp"
+  
+## 编译过程中会生成 objs 中间文件目录
+[root@localhost nginx-1.16.0]# cd objs/
+[root@localhost objs]# ls
+autoconf.err  Makefile  ngx_auto_config.h  ngx_auto_headers.h  ngx_modules.c  src
+## ngx_modules.c 是编译进nginx的模块
+
+## 执行make 编译
+[root@localhost nginx-1.16.0]# make
+
+[root@localhost objs]# pwd
+/usr/local/src/nginx-1.16.0/objs
+[root@localhost objs]# ls		## 动态的模块存在 objs 目录下
+autoconf.err  Makefile  nginx  nginx.8  ngx_auto_config.h  ngx_auto_headers.h  ngx_modules.c  ngx_modules.o  src
+[root@localhost objs]# ls src/	## 编译生成的.o 文件放在objs/src 目录下
+core  event  http  mail  misc  os  stream
+
+## 执行编译后的安装
+[root@localhost nginx-1.16.0]# make install 
+## 安装完成后
+[root@localhost nginx]# pwd 
+/usr/local/nginx
+[root@localhost nginx]# ls
+conf  html  logs  sbin
+```
+
+##### Nginx的配置语法
+
+![1560321631504](assets/1560321631504.png)
+
+![1560322123607](assets/1560322123607.png)
+
+![1560322088997](assets/1560322088997.png)
+
+![1560322196688](assets/1560322196688.png)
+
+![1560322398844](assets/1560322398844.png)
+
+##### Nginx命令行
+
+![1560322491699](assets/1560322491699.png)
+
+##### Nginx的版本热更新
+
+```
+## 备份老的nginx
+[root@localhost sbin]# pwd
+/usr/local/nginx/sbin
+[root@localhost sbin]# cp nginx nginx.old
+
+## 编译新的nginx
+[root@localhost nginx-1.16.0]# ./configure --prefix=/usr/local/nginx
+[root@localhost nginx-1.16.0]# make && make install 
+
+## 拷贝新的nginx 到目录下
+[root@localhost sbin]# ./nginx -V
+nginx version: nginx/1.16.0
+built by gcc 4.8.5 20150623 (Red Hat 4.8.5-16) (GCC) 
+configure arguments: --prefix=/usr/local/nginx
+[root@localhost sbin]# ./nginx.old -V
+nginx version: nginx/1.14.2
+built by gcc 4.8.5 20150623 (Red Hat 4.8.5-16) (GCC) 
+configure arguments: --prefix=/usr/local/nginx
+
+## 给正在运行的nginx进程发送 USR2 信号，告诉开始进行热部署
+[root@localhost sbin]# ps -ef | grep nginx 
+root      21237      1  0 20:53 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+nobody    21238  21237  0 20:53 ?        00:00:00 nginx: worker process
+root      23817  10111  0 20:55 pts/0    00:00:00 grep --color=auto nginx
+[root@localhost sbin]# kill -USR2 21237
+[root@localhost sbin]# ps -ef | grep nginx ## 此时nginx启动了两个master进程
+root      21237      1  0 20:53 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+nobody    21238  21237  0 20:53 ?        00:00:00 nginx: worker process
+root      23818  21237  0 20:56 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+nobody    23819  23818  0 20:56 ?        00:00:00 nginx: worker process
+root      23821  10111  0 20:56 pts/0    00:00:00 grep --color=auto nginx
+
+## 关闭老的nginx进程下的worker进程，老的master进程不退出
+[root@localhost sbin]# kill -WINCH 21237
+[root@localhost sbin]# ps -ef | grep nginx 
+root      21237      1  0 20:53 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+root      23818  21237  0 20:56 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+nobody    23819  23818  0 20:56 ?        00:00:00 nginx: worker process
+
+## 进行老版本的回退，老的重新拉起worker进程
+[root@localhost sbin]# kill -HUP 21237
+[root@localhost sbin]# ps -ef | grep nginx 
+root      21237      1  0 20:53 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+root      23818  21237  0 20:56 ?        00:00:00 nginx: master process /usr/local/nginx/sbin/nginx
+nobody    23819  23818  0 20:56 ?        00:00:00 nginx: worker process
+nobody    23857  21237  0 21:03 ?        00:00:00 nginx: worker process
+
+## 升级完成后可以kill 掉老的master进程
+```
+
+##### Nginx的日志切割
+
+```
+./nginx -s reopen
+或
+kill -USR1 nginxpid
+```
+
+##### Nginx 配置静态的资源服务器
+
+```
+ root 与alias 的区别：
+ location /website/ {
+        root /var/lib/www;
+        autoindex on;
+    }
+上面的配置浏览http://localhost/website/会显示404错误，因为**root属性指定的值是要加入到最终路径的**，所以访问的位置变成了/var/lib/www/website/。而我不想把访问的URI加入到路径中。所以就需要使用alias属性，其会抛弃URI，直接访问alias指定的位置, 所以最终路径变成/var/lib/www/。（最后需要加斜线）
+
+    location /website/ {
+        alias /var/lib/www;
+        autoindex on;
+    }
+```
+
+**启用gzip压缩**
+
+![1560326433306](assets/1560326433306.png)
+
+```
+gzip_min_length 1; 表示小于1字节的就不进行压缩了
+gzip_comp_level 2; 压缩级别
+gzip_types 针对某些文件进行压缩
+```
+
+**设置访问大文件访问速率限制**
+
+![1560326671023](assets/1560326671023.png)
+
+![1560326799400](assets/1560326799400.png)
+
+```
+set $limit_rate 1k; 每秒限制1kB大小的速度到浏览器中
+```
+
+##### Nginx具有缓存功能的反向代理
+
+![1560327256844](assets/1560327256844.png)
+
+```
+使用反向代理之后需要使用：
+proxy_set_header 等对一些使用的内置变量进行重写
+```
+
+![1560327579973](assets/1560327579973.png)
+
+```
+proxy_cache_path 设置缓存的路径
+/tmp/nginxcache 设置缓存的路径
+keys_zone=my_cache:10m 开辟了10m 的共享内存的空间，用于存放keys 关键字
+```
+
+![1560327751742](assets/1560327751742.png)
+
+```
+proxy_cache my_cache;  指定刚刚开辟的共享内存空间
+proxy_cache_key $host$uri$is_args$args;  对于同一主机来的相同的请求（以此为key），来进行缓存
+proxy_cache_valid 用于指定哪些相应不进行缓存的返回
+```
+
+##### GoAccess 实现可视化并实时监控access日志
+
+启动goaccess 程序，实时的生成报表
+
+![1560328267884](assets/1560328267884.png)
+
+配置location 用于访问report.html 文件
+
+![1560328371153](assets/1560328371153.png)
+
+访问的页面
+
+![1560328402301](assets/1560328402301.png)
+
+##### SSL安全协议
+
+![1560328467817](assets/1560328467817.png)
+
+![1560328536903](assets/1560328536903.png)
+
+![1560328689644](assets/1560328689644.png)
+
+![1560328773414](assets/1560328773414.png)
+
+```
+RC4 通过对明文与密钥进行 异或操作进行加密
+```
+
+![1560328844143](assets/1560328844143.png)
+
+```
+一个文件使用公钥进行加密，只能通过私钥进行解密；同样，一个文件通过私钥进行加密，则只能通过公钥进行解密。
+```
+
+##### SSL证书的公信力如何保证
+
+```
+在多方通信的场景下，bob如何验证Alice的公钥就是Alice发来的，中间没有其他人进行挟持呢？
+所以在多方通信的过程中必须要有一个公信机构，CA机构
+```
+
+**CA机构如何颁发证书以及证书过期**
+
+![1560329265394](assets/1560329265394.png)
+
+```
+证书登记流程：
+1. 证书订阅人需要提交 证书签名的申请，需要填写我是谁，我是什么组织，我的位置等信息
+2. CA机构拿到CSR 请求后，会生成一个公钥和私钥，发给申请人，其中公钥会在CA机构保存一份
+3. 部署证书到web服务器
+4. 浏览器向web发送请求的时候，web端会发送公钥给浏览器，浏览器内置有CA机构颁发的公钥，用于验证web端给的公钥是否是CA机构颁发的证书
+5. 浏览器通过 OCSP去查看证书是否过期，web nginx也可以主动的去查看证书是否过期
+```
+
+![1560329896888](assets/1560329896888.png)
+
+![1560330040364](assets/1560330040364.png)
+
+```
+www.taohui.pub  为站点的主证书
+Encryption Everywhere DV 为二级证书机构
+DigiCert Global Root CA 为根证书（操作系统内置的证书，一般一年更新一次）
+
+## nginx 在发送证书时，会想浏览器发送站点的住证书和二级证书
+```
+
+##### TLS的通信过程
+
+![1560330387506](assets/1560330387506.png)
+
+```
+1. 有浏览器想服务端发送 Client Hello（浏览器告诉服务端支持哪些加密算法）
+2. Server Hello 主要是告诉浏览器自己支持的加密算法的列表以及倾向使用的安全套件；如果nginx 打开了session cache 则一天内断开的客户端不用再协商密码而是使用之前的密钥算法
+3. Server Certificate 服务端发送自己的公钥证书，公钥证书包含证书链（浏览器可以找到自己的根证书库验证是否有效）；如果协商的算法是 椭圆曲线算法，则需要发送 椭圆曲线所要使用的公共参数；	
+4. 服务器发送 Server Hello Done
+5. 客户端根据 椭圆曲线算法的公共参数，生成自己的公钥和私钥，把公钥发送给服务端；而服务端也根据 椭圆曲线算法的公共参数，生成公私钥，把公钥发送给客户端；
+6. 客户端和服务端 都根据自己的私钥和对方发送过来的公钥  进行 key generation；双方各自生成的key应该是相同的；
+7. 通过生成的密钥进行数据加密
+```
+
+##### 使用certbot部署nginx HTTPS站点
+
+```
+[root@localhost conf]# yum -y install python2-certbot-nginx 
+```
+
+![1560332206365](assets/1560332206365.png)
+
+![1560332232378](assets/1560332232378.png)
+
+```
+ssl_dhparam 使用非对称加密的话的参数
+```
+
+**options-ssl-nginx.conf**
+
+![1560332271579](assets/1560332271579.png)
+
+![1560332509798](assets/1560332509798.png)
+
+```
+ssl_session_cache 开辟空间进行session cache 1m的大小，1m大约可以缓存4000个请求session
+ssl_session_timeout 1440m; 1440min 为一天
+ssl_ciphers 支持的安全套件
+```
+
+##### OpenResty 安装及lua简单使用
+
+```
+[root@localhost src]# wget https://openresty.org/download/openresty-1.15.8.1.tar.gz --no-check-certificate
+
+## configure
+[root@localhost openresty-1.15.8.1]# ./configure --prefix=/usr/local/openresty
+[root@localhost openresty-1.15.8.1]# make && make install 
+```
+
+```
+        location /lua {
+            default_type text/html;
+            content_by_lua '
+ngx.say("User-Agent: ", ngx.req.get_headers()["User-Agent"])
+            ';
+        }
+```
+
+![1560334502230](assets/1560334502230.png)
+
+#### 第二章 Nginx架构基础
+
+##### Nginx请求的处理流程
+
+![1560334689167](assets/1560334689167.png)
+
+```
+传输层状态机：处理TCP、UDP的四层的状态机
+HTTP 状态机：处理七层协议
+MAIL状态机：处理邮件的
+
+nginx使用非阻塞的时间驱动处理引擎（epoll），往往使用异步的处理需要使用状态机才能正确的处理和识别请求；使用线程池处理磁盘阻塞的调用
+```
+
+##### Nginx的进程结构
+
+![1560335065092](assets/1560335065092.png)
+
+```
+Cache manager 进行缓存的管理
+Cache loader 进行缓存的载入
+进程间的通信使用共享内存进行
+worker进程建议配置为CPU合数相同，并且每个worker进行绑定到执行的cpu 上，便于利用CPU上的缓存。
+
+nginx 的reload 命令会，将之前的worker进程停止后，重新启动新的worker进程；与-SIGHUP的信号相同
+在使用-SIGTERM 对其中的一个 work进程发送退出的信号后，master会重新启动一个新的work进程
+```
+
+##### 使用信号管理nginx的父子进程
+
+![1560335637423](assets/1560335637423.png)
+
+```
+当work进程意外的终止的时候，会向master进程发送CHLD信号，这时master会重新拉起一个master；
+TERM,INT 立即停止nginx进程
+QUIT 优雅的停止nginx进程
+HUP 重新载入配置文件
+USR1 重新打开日志文件
+USR2 重新启动一个 mater进程，监听同样的端口
+WINCH 退出master管理下的 work进程
+```
+
+##### reload配置文件的真相
+
+![1560336098895](assets/1560336098895.png)
+
+![1560336195100](assets/1560336195100.png)
+
+##### Nginx 热升级的完整流程
+
+![1560336312650](assets/1560336312650.png)
+
+![1560336470921](assets/1560336470921.png)
+
+##### work优雅的关闭
+
+![1560336582105](assets/1560336582105.png)
+
+##### 网络收发与Nginx事件间的对应关系
+
+![1560336788861](assets/1560336788861.png)
+
+![1560336860705](assets/1560336860705.png)
+
+![1560336934773](assets/1560336934773.png)
+
+**TCP层（传输层）：主要是进程与进程通信的port**
+
+![1560337548604](assets/1560337548604.png)
+
+**IP 层（网络层）：机器与机器之间的找到**
+
+![1560337648568](assets/1560337648568.png)
+
+**TCP的三次握手**
+
+![1560337798664](assets/1560337798664.png)
+
+##### Nginx事件驱动模型
+
+![1560337869964](assets/1560337869964.png)
+
+```
+wait for events on connections: 等待事件的到来，在epoll 中是 epoll_wait的方法
+当操作系统处理了一个TCP三次握手的连接后，操作系统会通知epoll_wait 可以往下走了；同时环形nginx的work进程。
+之后，就会从事件的队列中取出待处理的事件（比如建立连接的事件，TCP处理报文的事件）；
+```
+
+##### epoll 的优劣及原理
+
+![1560338478334](assets/1560338478334.png)
+
+```
+活跃链接是存放在rdllink 的链表中的
+```
+
+##### Nginx请求切换
+
+![1560338828170](assets/1560338828170.png)
+
+```
+传统的process 切换依靠的是操作系统分配不同的事件片进行切换；而nginx是在用户态自己进行切换，除非是nginx work使用的时间片到了，时间片的长度一般是5ms 到800ms，通过对nginx work的优先级提高，让操作系统优先分配时间片处理nginx的请求（往往配置 -19）。
+```
+
+##### 同步、异步 & 阻塞、非阻塞的区别
+
+![1560340319292](assets/1560340319292.png)
+
+![1560340386301](assets/1560340386301.png)
+
+​	
+
+![1560340482455](assets/1560340482455.png)
+
+##### Nginx模块
+
+![1560742490009](assets/1560742490009.png)
+
+```
+ngx_module_t 是每个模块必须定义的一个结构体，其中的type定义的是属于哪一类型的模块
+```
+
+##### Nginx模块的分类
+
+![1560742650612](assets/1560742650612.png)
+
+##### Nginx如何通过连接池处理网络请求
+
+![1560743148466](assets/1560743148466.png)
+
+```
+每一个 worker进程都有一个ngx_cycle_t 的结构
+其中 connections 对应的nginx 的配置 worker_connections 进行配置，默认为512（此配置不仅用于client的连接，也用于后端服务器的连接，所以upstream 的配置，会占用两个的连接）
+```
+
+![1560743430549](assets/1560743430549.png)
+
+```
+每个连接的结构体为 ngx_connection_s 的结构体，约占232字节；而每个连接对应的读写事件的结构体为 ngx_event_s 结构体 为96 字节，所以一个连接占用的内存大概为 232+96*2 = 424字节内存
+```
+
+##### 内存池对性能的影响
+
+![1563265481275](assets/1563265481275.png)
+
+```
+内存池进行内存的预分配，避免频繁的内存分配，减少内存碎片，提高性能。
+分为 连接内存池：connection_pool_size 256|512; 单位字节
+请求内存池：request_pool_size: 4k 默认
+```
+
+##### 所有worker 进程协同的关键：共享内存
+
+![1563265863060](assets/1563265863060.png)
+
+```
+nginx 进程间的通信主要有两种：
+	信号 主要是在管理nginx master 与worker进程中的信号
+	共享内存 进行数据的同步，所谓的共享内存就是打开了一块内存，所有的worker进程都可以进行访问。
+由于有共享内存的存在，则引入了 锁的机制，nginx的锁主要是自旋锁（即一个worker进程拿到锁了之后，其他worker进程会一直不断的尝试去获取锁，而不是等待）
+```
+
+![1563266207622](assets/1563266207622.png)
+
+```
+rbtree: 红黑树
+```
+
+![1563266292467](assets/1563266292467.png)
+
+```
+lua_shared_dict 指令出现的时候，会进行共享内存的分配
+lua_shared_dict dogs 10m; 则分配了 命名为dogs 为10m 的共享内存
+```
+
+##### 共享内存的管理工具：Slab 管理器
+
+![1563266531576](assets/1563266531576.png)
+
+```
+slab 内存管理，会把整块共享内存先切分很多的页面，每个页面为4k, 并且分为很多的slot，这些slot 以2 的倍数向上增长。比如：要使用 51k 的，放在 64k 的slot上。
+```
+
+![1563266656289](assets/1563266656289.png)
+
+```
+ngx_slab_stat Tengine 的一个模块，用来监控slab 的使用
+
+把Tengine 的 slab_stat 模块编译进 openresty：
+[root@localhost src]# wget http://tengine.taobao.org/download/tengine-2.3.1.tar.gz
+[root@localhost src]# tar -xf tengine-2.3.1.tar.gz 
+[root@localhost modules]# ls
+ngx_backtrace_module           ngx_http_reqstat_module                   ngx_http_upstream_dynamic_module
+ngx_debug_pool                 ngx_http_slice_module                     ngx_http_upstream_dyups_module
+ngx_debug_timer                ngx_http_sysguard_module                  ngx_http_upstream_keepalive_module
+ngx_http_concat_module         ngx_http_tfs_module                       ngx_http_upstream_session_sticky_module
+ngx_http_footer_filter_module  ngx_http_trim_filter_module               ngx_http_user_agent_module
+ngx_http_lua_module            ngx_http_upstream_check_module            ngx_slab_stat
+ngx_http_proxy_connect_module  ngx_http_upstream_consistent_hash_module
+
+[root@localhost openresty-1.15.8.1]# ls ../tengine-2.3.1/modules/ngx_slab_stat/
+config  ngx_http_slab_stat_module.c  README.cn  README.md  slab_stat.patch  t
+
+[root@localhost openresty-1.15.8.1]# ./configure --add-module=../tengine-2.3.1/modules/ngx_slab_stat/		## 编译添加 slab_stat
+```
+
+![1563268127397](assets/1563268127397.png)
+
+![1563268160794](assets/1563268160794.png)
+
+##### 哈希表的max_size 和buket_size配置（Nginx 容器）
+
+![1563268272031](assets/1563268272031.png)
+
+```
+nginx的6个容器：
+	数组：ngx_array_t 是多块的连续内存，每块内存可以存放许多元素
+	链表：ngx_list_t 
+	队列：ngx_queue_t 
+```
+
+![1563269307176](assets/1563269307176.png)
+
+![1563269843757](assets/1563269843757.png)
+
+```
+max size 控制了最大的hash 表的 bucket 的个数
+bucket size 是 CPU的 cache line 的对齐问题
+```
+
+##### nginx 最常用的容器：红黑树
+
+![1563270136933](assets/1563270136933.png)
+
+![1563270281103](assets/1563270281103.png)
+
+![1563270315501](assets/1563270315501.png)
+
+##### 使用nginx的动态模块
+
+![1563270395457](assets/1563270395457.png)
+
+![1563270604239](assets/1563270604239.png)
+
+![1563270711665](assets/1563270711665.png)
+
+![1563270725212](assets/1563270725212.png)
+
+```
+image_filter 实时的压缩 图片的大小
+```
+
+
+
+#### 第三章 详解HTTP模块
+
+##### 冲突的配置指令以谁为准？
+
+![1563270922648](assets/1563270922648.png)
+
+![1563270975084](assets/1563270975084.png)
+
+![1563271011176](assets/1563271011176.png)
+
+![1563271090187](assets/1563271090187.png)
+
+![1563271184577](assets/1563271184577.png)
+
+##### Listen 指令的用法
+
+![1563271353152](assets/1563271353152.png)
+
+##### 处理HTTP请求头部的流程
+
+![1563271506631](assets/1563271506631.png)
+
+![1563271722925](assets/1563271722925.png)
+
+##### nginx中的正则表达式
+
+![1563271989641](assets/1563271989641.png)
+
+![1563272049633](assets/1563272049633.png)
+
+![1563272256215](assets/1563272256215.png)
+
+##### 如何找到处理请求的server指令快
+
+![1563272366137](assets/1563272366137.png)
+
+![1563272549887](assets/1563272549887.png)
+
+```
+将server_name_in_redirect 改为on，则请求 second.taohui.tech 会使用到 primary.taohui.tech进行拼接
+```
+
+![1563272639620](assets/1563272639620.png)
+
+![1563272678457](assets/1563272678457.png)
+
+![1563272788838](assets/1563272788838.png)
+
+##### 详解HTTP请求的11个阶段
+
+###### ![1563272937240](assets/1563272937240.png)
+
+##### 11个阶段的顺序处理
+
+![1563273248692](assets/1563273248692.png)
+
+##### postread阶段：获取客户端真是的IP模块 realip
+
+![1563273413537](assets/1563273413537.png)
+
+```
+X-Rorwarded-For 可以添加多个的 请求途径的IP
+X-Real-IP 只有真是的客户请求的IP
+```
+
+![1563273910155](assets/1563273910155.png)
+
+![1563273949535](assets/1563273949535.png)
+
+![1563273990817](assets/1563273990817.png)
+
+```
+set_real_ip_from 指定对于来源IP 是 哪些的，才进行 real_ip 的更改
+real_ip_header IP是从哪个变量里去（从 X-Rorwarded-For 还是X-Real-IP）
+real_ip_recursive 递归的查找最初的 real_ip
+```
+
+![1563274431494](assets/1563274431494.png)
+
+![1563274473821](assets/1563274473821.png)
+
+![1563274503038](assets/1563274503038.png)
+
+![1563274522531](assets/1563274522531.png)
+
+##### rewrite阶段 rewrite 模块：return指令
+
+![1563274648302](assets/1563274648302.png)
+
+![1563274823576](assets/1563274823576.png)
+
+![1563274914509](assets/1563274914509.png)
+
+![1563275039481](assets/1563275039481.png)
+
+![1563275060705](assets/1563275060705.png)
+
+![1563275096898](assets/1563275096898.png)
+
+![1563275109112](assets/1563275109112.png)
+
+![1563275127948](assets/1563275127948.png)
+
+![1563275150529](assets/1563275150529.png)
+
+##### rewrite阶段 rewrite 模块：rewrite指令(重写URL)
+
+![1563275222599](assets/1563275222599.png)
+
+![1563275399379](assets/1563275399379.png)
+
+![1563275541845](assets/1563275541845.png)
+
+![1563275559554](assets/1563275559554.png)
+
+![1563275624602](assets/1563275624602.png)
+
+![1563275671684](assets/1563275671684.png)
+
+![1563275706710](assets/1563275706710.png)
+
+![1563275770146](assets/1563275770146.png)
+
+![1563275931502](assets/1563275931502.png)
+
+![1563275962858](assets/1563275962858.png)
+
+##### rewrite阶段 rewrite 模块：条件判断
+
+![1563328716814](assets/1563328716814.png)
+
+![1563328751603](assets/1563328751603.png)
+
+​	![1563328812370](assets/1563328812370.png)
+
+##### find_config 阶段：找到处理请求的location 指令块
+
+![1563328978699](assets/1563328978699.png)
+
+```
+merge_slashes on 合并url中的斜杠，多个相邻的斜杠合并为 一个；当URL 中做了base64 编码的时候需要 进行关闭
+```
+
+![1563329106378](assets/1563329106378.png)
+
+```
+前缀字符串：
+	常规：location /aa {...}
+	= : location = /aa {...} 精确匹配 /aa 
+	^~ : location ^~ /aa {...}  匹配到 /aa 后 不在进行 正则的匹配
+```
+
+![1563329343240](assets/1563329343240.png)
+
+![1563329422610](assets/1563329422610.png)
+
+```
+首先 会遍历所有的前缀字符串的location
+	1）如果 和 = 所对应的 URL 完全匹配后，则停止匹配，使用 = 的location
+	2）再进行 ^~ 后的 URL进行匹配，匹配上 则停止下面的正则的匹配
+	3）记住最长的 匹配的URL
+		依次进行nginx.conf 书写顺序进行正则匹配，匹配不上进行下一条的 正则规则，匹配上则使用匹配的正则规则；如果都匹配不上，则使用 记住的最长的匹配的 URL
+```
+
+![1563330059482](assets/1563330059482.png)
+
+![1563330107046](assets/1563330107046.png)
+
+```
+curl location.taohui.tech/Test1/  匹配的是 ^~ /Test1/ 最长匹配，而此后又终止 后续的正则匹配
+```
+
+![1563330572880](assets/1563330572880.png)
+
+![1563330601054](assets/1563330601054.png)
+
+```
+因为 /Test1/Test2/ 最后有一个 / 结尾，而 ~* /Test1/(\w+)$ 最后没有 / ;所以 正则没有匹配上，使用的是最长的前缀字符进行匹配，及 /Test1/Test2
+```
+
+##### preaccess 阶段：对连接进行限制的 limit_conn 模块
+
+![1563330938172](assets/1563330938172.png)
+
+```
+limit_conn 使用了一个zone 指令，nginx 所有的zone指令都是基于共享内存的
+```
+
+![1563331101891](assets/1563331101891.png)
+
+```
+limit_conn_zone: key 设置一般为客户端的真实IP， zone=name:size 是开辟大小为size名字为name的共享内存
+limit_conn: zone 指的是 开辟的共享内存的name，number 是限制的并发连接数是多少
+```
+
+![1563331143831](assets/1563331143831.png)
+
+```
+limit_conn_log_level: 在出现限制的时候打印一条日志
+limit_conn_status 当触发限制的时候，返回给用户的状态码
+```
+
+![1563331439940](assets/1563331439940.png)
+
+```
+定义了一个 name为addr 的10m 空间的共享内存
+$binary_remote_addr 是一个二进制格式的IP地址，在ipv4下只有 4字节，效率比较高
+limit_conn_status 500 向用户返回 500 状态码
+limit_conn addr 1  限制用户的并发连接数为1
+limit_rate 50  限制用户每秒返回给用户的速度 50 字节（为了比较容易产生并发连接数为1 的限制）
+```
+
+![1563331839807](assets/1563331839807.png)
+
+##### preaccess 阶段：对请求进行限制的 limit_req 模块
+
+![1563331959226](assets/1563331959226.png)
+
+**leaky bucket 算法**
+
+![1563332018763](assets/1563332018763.png)
+
+```
+bursty flow: 突发流量
+leaky flow: 渗漏流量
+fixed flow: 固定流量
+
+当盆满的时候，用户再进行请求，就会返回错误。当盆没有满的时候，用户的请求会变慢，但是不会返回错误。
+```
+
+![1563337920897](assets/1563337920897.png)
+
+```
+limit_req_zone：zone 定义共享内存，可以是根据什么关键字限制请求的发送速度，rate 为设置每秒可以的请求数
+limit_req: zone 是之前定义的共享内存，burst 为盆里可以容纳的请求数，nodelay 盆里的请求不做演示处理，也立刻返回错误
+```
+
+![1563338154009](assets/1563338154009.png)
+
+```
+limit_req_log_level: 发生限速的时候打印日志
+```
+
+![1563338211321](assets/1563338211321.png)
+
+![1563338229287](assets/1563338229287.png)
+
+```
+limit_req 模块在 limit_conn 之前执行，如果limit_req 先向用户返回状态码，则 limit_conn 则不会再执行
+```
+
+##### access阶段：对IP做限制的access模块
+
+![1563338531496](assets/1563338531496.png)
+
+![1563338564019](assets/1563338564019.png)
+
+```
+deny 和 allow 是顺序执行的，匹配其中的一条，则不会再往下匹配执行。
+```
+
+##### access阶段：对用户名密码做限制的auth_basic模块
+
+![1563338764185](assets/1563338764185.png)
+
+```
+客户端 访问nginx的时候，nginx 返回 401 给客户端，客户端收到之后，会弹出对话框，让用户进行用户名密码的输入，然后将用户名密码以明文的形式发送到nginx，如果采用https 则可以保证密文传输
+```
+
+![1563338953076](assets/1563338953076.png)
+
+![1563338997573](assets/1563338997573.png)
+
+![1563339166182](assets/1563339166182.png)
+
+##### access阶段：使用第三方作权限控制的auth_request模块
+
+![1563339285125](assets/1563339285125.png)
+
+```
+auth_request: 请求到来后，生成子请求访问uri，根据子请求的结果决定是否放行
+auth_request_set: 根据子请求的相关变量可以设置一些变量
+```
+
+![1563340712935](assets/1563340712935.png)
+
+```
+auth_request: 设定访问的uri 为 /test_auth
+子请求反向代理到 8090的 /auth_upstream 
+proxy_pass_request_body off: 关闭传递body，没有必要
+```
+
+![1563340890024](assets/1563340890024.png)
+
+```
+8090 的nginx的配置
+```
+
+![1563340919861](assets/1563340919861.png)
+
+```
+更改返回状态码为 403
+```
+
+##### access阶段的statisfy 指令
+
+![1563341069138](assets/1563341069138.png)
+
+```
+statisfy all: 必须access 阶段的 三个模块（access、auth_basic、auth_request）都放行才能进行到后续的模块
+statisfy any: access 阶段中 单个模块中任意一个放行就可以
+```
+
+![1563341311688](assets/1563341311688.png)
+
+![1563344275877](assets/1563344275877.png)
+
+```
+1. return执行 在 server rewrite 和rewrite阶段，都先于access阶段
+2. 多个的access模块的执行顺序是有影响的。比如配置了 statisfy all; deny all; 则auth_basic 就没有机会执行了
+3. 可以访问到密码 因为配置了any，则access阶段的access模块拒绝后，则进行auth_basic 模块的判断
+4. 可以，对于放置的顺序没有要求
+5. 没有机会输入密码，因为 allow 属于access 模块，已经先于 auth_basic执行了，后续不在判断
+```
+
+##### precontent 阶段：按序访问资源的try_files 模块
+
+![1563416578355](assets/1563416578355.png)
+
+![1563416679463](assets/1563416679463.png)
+
+![1563416732326](assets/1563416732326.png)
+
+```
+try_files 多使用在反向代理中，先访问到达到的nginx 的本地是否有需要的文件，没有的话则设定访问代理到其他的URL查找资源
+```
+
+##### 实时拷贝流量：precontent阶段的mirror模块
+
+```
+mirror 模块可以创建一份镜像流量，将生产环境的请求同步拷贝一份到测试环境做处理
+```
+
+![1563417035175](assets/1563417035175.png)
+
+```
+mirror 模块，当请求到达nginx后，可以生成一个子请求，子请求可以通过反向代理去访问其他的环境（比如测试环境），对测试环境返回的内容是不进行处理的。
+mirror uri; 把同步复制的请求访问到uri去
+mirror_request_body on; 把请求的body 也转发到上游的服务中
+```
+
+**上游服务的nginx配置**
+
+![1563417375509](assets/1563417375509.png)
+
+**实际的用户处理请求的nginx**
+
+![1563417432905](assets/1563417432905.png)
+
+![1563417451450](assets/1563417451450.png)
+
+```
+打开了8001 端口，访问 / 的时候，拷贝一份流量到mirror去，internal 指定只是内部的请求，转发到10020 的nginx上
+```
+
+**到本机8001 的请求**
+
+![1563417682522](assets/1563417682522.png)
+
+**上游nginx的请求**
+
+![1563417742642](assets/1563417742642.png)
+
+##### content阶段：root和alias 指令
+
+![1563417896311](assets/1563417896311.png)
+
+```
+root和 alias指令属于static模块
+```
+
+![1563417874517](assets/1563417874517.png)
+
+```
+这两个指令都是把URL映射为文件路径，返回静态的文件内容；root会把完整的URL映射到文件路径中（把location后匹配的URL添加到 root path 之后），alias **不会**把location 后的URL映射到文件路径中去
+```
+
+![1563418205749](assets/1563418205749.png)
+
+![1563418237309](assets/1563418237309.png)
+
+**访问root**
+
+![1563418274700](assets/1563418274700.png)
+
+![1563418478748](assets/1563418478748.png)
+
+```
+访问 static.taohui.tech/root/ 匹配 的location 为location /root {root html}, 所以访问的文件应该为 html/root （加入了location的 root）这个文件，不存在这个文件
+
+从日志可以看出，访问的是 html/root/index.html  ，添加了 index.html 是因为 访问的时候 最后又斜杠（static.taohui.tech/root/）
+```
+
+![1563418592326](assets/1563418592326.png)
+
+![1563418606306](assets/1563418606306.png)
+
+```
+会在 html/first/1.txt 后面再添加 /root/1.txt
+```
+
+![1563418678635](assets/1563418678635.png)
+
+**访问alias**
+
+![1563418768412](assets/1563418768412.png)
+
+```
+访问 static.taohui.tech/alias/  访问的是 static.taohui.tech/alias/html/index.html
+```
+
+![1563418843020](assets/1563418843020.png)
+
+![1563418921357](assets/1563418921357.png)
+
+```
+访问的是 static.taohui.tech/alias/html/first/1.txt
+```
+
+##### static 模块提供的三个变量
+
+![1563419042441](assets/1563419042441.png)
+
+![1563419161268](assets/1563419161268.png)
+
+![1563419192824](assets/1563419192824.png)
+
+![1563419263685](assets/1563419263685.png)
+
+```
+$request_filename: 完整的URL路径
+$document_root: 文件的文件夹路径（不进行软连接替换）
+$realpath_root: 文件的文件夹实际路径
+```
+
+![1563419391687](assets/1563419391687.png)
+
+```
+types 指令，当读取磁盘中的文件时候，根据文件的扩展名做一次映射
+default_type 在匹配不到相应的文件时，则使用默认的类型设置cotent-type
+type_hash_bucket_size 为了提高types 的性能，做了hash
+```
+
+![1563419587957](assets/1563419587957.png)
+
+```
+将log_not_found 置为off，则可以取消找不到文件的日志，提高性能
+```
+
+##### static模块对URL不以斜杠结尾 却访问目录的做法
+
+![1563419883919](assets/1563419883919.png)
+
+![1563420269533](assets/1563420269533.png)
+
+![1563420429521](assets/1563420429521.png)
+
+```
+absolute_redirect 置为off
+```
+
+![1563420476090](assets/1563420476090.png)
+
+```
+访问 html 下的first 但是 URL 最后没有加 反斜杠，此时就发生了 301 的跳转，此时返回的 Location: /fitst/  没有 http 的头部的
+```
+
+![1563420599844](assets/1563420599844.png)
+
+```
+注释掉absolute_redirect 及 默认为on
+```
+
+![1563420634364](assets/1563420634364.png)
+
+```
+此时返回的 Location 带有http://localhost:8088
+```
+
+![1563420690404](assets/1563420690404.png)
+
+**想用server_name中的域名返回到 Location中去**
+
+![1563420750195](assets/1563420750195.png)
+
+```
+配置 server_name_in_redirect on 
+```
+
+![1563420793187](assets/1563420793187.png)
+
+##### content 阶段的index模块和auto_index模块
+
+![1563420873226](assets/1563420873226.png)
+
+```
+index模块 先于 autho_index 模块执行的
+```
+
+![1563421002449](assets/1563421002449.png)
+
+![1563421114837](assets/1563421114837.png)
+
+![1563421211849](assets/1563421211849.png)
+
+```
+index 先于autoindex 执行，因 index 默认访问的index.html ,html 下存在 index.html,所以默认的会访问 index.html; 如果设置 index a.html, a.html 不存在，则autoindex 生效，返回html 下的目录内容
+```
+
+![1563421360200](assets/1563421360200.png)
+
+```
+autoindex_exact_size on 的话，会以字节显示文件的大小
+```
+
+##### 提升多个小文件性能的concat模块
+
+![1563421607785](assets/1563421607785.png)
+
+![1563432768579](assets/1563432768579.png)
+
+```
+concat: 启用还是不启用
+concat_delimiter: 定义返回的多个文件之前的分隔符
+concat_types: 对那些文件的内容进行合并
+concat_unique: 只对一种或多种的文件类型进行合并
+concat_ignore_file_error: 发现有一些的文件存在错误，则进行忽略
+concat_max_files: 最多的合并的文件的个数
+```
+
+**淘宝网的请求**
+
+![1563433060607](assets/1563433060607.png)
+
+```
+再一次的请求中 使用 在URL后 添加 ?? 返回多个文件
+```
+
+![1563433143647](assets/1563433143647.png)
+
+```
+concat_max_files 设置最多返回20个文件
+concat_delimiter 以 ::: 为分割
+```
+
+![1563433243294](assets/1563433243294.png)
+
+![1563433317359](assets/1563433317359.png)
+
+![1563433282031](assets/1563433282031.png)
+
+```
+访问返回的结果为1.txt 和 2.txt 的内容，内容用 ::: 进行分割
+
+当使用 http1.0 或 1.1 时可以使用 concat模块提升效率
+```
+
+##### access日志的详细的用法
+
+```
+static 之后进入到 log 阶段
+```
+
+![1563433465561](assets/1563433465561.png)
+
+![1563433476960](assets/1563433476960.png)
+
+![1563433519384](assets/1563433519384.png)
+
+```
+escape 定义日志的分隔符，以及是不是json 的格式
+```
+
+![1563433650525](assets/1563433650525.png)
+
+```
+当path路径中包含变量的时候，每一个请求，的变量都可能不同，意味着nginx在不停的打开关闭不同的日志文件，打开cache就是为了解决这个问题的
+access_log [if=condition] : 只有当条件满足的时候记录日志
+日志缓存 [buffer=size] [flush=time]: 当积累的日志的大小超出buffer的大小的时候，进行写入; 当到达flush时间的时候进行写入；
+```
+
+![1563434048993](assets/1563434048993.png)
+
+```
+当access_log 的日志写入路径中航含有变量的时候，使用open_log_file_cache 打开一个缓存，来使得含有变量的日志文件不会被经常的打开关闭。
+```
+
+##### HTTP过滤模块的调用流程
+
+![1563434240318](assets/1563434240318.png)
+
+![1563434482418](assets/1563434482418.png)
+
+```
+copy_filter 会复制包体的内容，使用0拷贝技术，用户态的内存不经过nginx，直接发送给用户
+write_filter 会调用系统的系统调用发送给客户端的响应
+```
+
+##### 用过滤模块更改响应中的字符串：sub模块
+
+![1563434765832](assets/1563434765832.png)
+
+![1563434790120](assets/1563434790120.png)
+
+```
+sub_filter 把返回给用户的响应的字符串string，替换为replacement
+sub_filter_last_modified on 因为修改了返回给用户的响应，还需要显示原先的last_modified 返回给用户
+sub_filter_once 只修改一次
+sub_filter_types 只针对什么样的类型的响应进行替换（可以设置为 *, 对所有的文件进行替换）
+```
+
+![1563435128795](assets/1563435128795.png)
+
+```
+返回的是nginx默认的 欢迎页面
+```
+
+![1563435178396](assets/1563435178396.png)
+
+![1563435326237](assets/1563435326237.png)
+
+```
+这个模块是忽略大小写的
+```
+
+![1563435288492](assets/1563435288492.png)
+
+```
+因为设置了替换once, 只把a 标签内的nginx.org 替换了，而 显示的内容nginx.org 没有替换
+```
+
+![1563435731685](assets/1563435731685.png)
+
+```
+显示last_modified 这个HEAD 给客户
+```
+
+![1563435432045](assets/1563435432045.png)
+
+##### 用过滤模块在http响应的前后添加内容： addition 模块
+
+![1563436778589](assets/1563436778589.png)
+
+![1563436814794](assets/1563436814794.png)
+
+```
+add_before_body 在body之前添加一些内容，根据 uri 这个子请求返回的内容，添加到body之前
+addition_types 指定怎样的context 内容使用addition 模块
+```
+
+![1563437023950](assets/1563437023950.png)
+
+**不添加addition模块指令**
+
+![1563437075447](assets/1563437075447.png)
+
+![1563437090440](assets/1563437090440.png)
+
+```
+打开addition模块的注释
+会在内容的前后添加响应的内容
+```
+
+![1563437135190](assets/1563437135190.png)
+
+##### Nginx变量的运行原理
+
+![1563437263942](assets/1563437263942.png)
+
+```
+左边为提供变量的模块，右边为使用变量的模块，提供变量的模块如果提供这个变量呢？
+
+启动nginx，nginx发现这是一个http模块，http模块有一个preconfiguretion的方法，在还没有读取nginx.conf 之前添加新变量（其实就是定义了一个变量名和解析出这个变量的方法（即给出输入http head,通过定义解析http head 中取出Host: 的对应字段，作为 nginx的host变量的值）），这个时候请求还没有进来，只是定义了变量的提取规则。
+
+使用变量的模块，通过读取nginx.conf 文件确定使用了哪些的变量，当真正的http请求到来的时候，处理请求时通过变量名去找寻变量的解析方法，从而解析出变量的值
+```
+
+![1563437453159](assets/1563437453159.png)
+
+```
+使用变量的模块，只有在http请求到来的时候，才进行解析取值。
+```
+
+![1563437505251](assets/1563437505251.png)
+
+```
+variable_hash_bucket_size 变量名如果起的过长，可以考虑增大这个size
+variable_hash_max_size 如果变量比较多的话可以增大这个值
+```
+
+##### HTTP框架提供的请求相关的变量
+
+**var.conf 的配置**
+
+![1563438665303](assets/1563438665303.png)
+
+![1563438711594](assets/1563438711594.png)
+
+![1563438611634](assets/1563438611634.png)
+
+```
+arg_a: 为a 的值；arg_b: 为b 的值；args: 为URL参数
+connection： 为连接的序号； connection——requests: 一共是执行了1个请求
+cookie_a: 是cookie a=1 的值
+host: localhost, server_name: var.taohui.tech, http_host: localhost:9090
+```
+
+![1563439064685](assets/1563439064685.png)
+
+```
+body_bytes_sent: 在http head 解析阶段没有值，在日志中是有值的
+```
+
+![1563439132149](assets/1563439132149.png)
+
+![1563439181515](assets/1563439181515.png)
+
+![1563439537551](assets/1563439537551.png)
+
+```
+uri 是资源定位，不包含 ? 后面的参数
+document_uri 与uri 完全相同，只是因为历史原因而存在 
+```
+
+![1563439691537](assets/1563439691537.png)
+
+![1563439759351](assets/1563439759351.png)
+
+![1563439802914](assets/1563439802914.png)
+
+```
+特殊的6种nginx会做一些微小的处理，而其他的则 从http head 中原封不动的提取
+```
+
+##### HTTP 框架提供的其他的变量
+
+![1563440002870](assets/1563440002870.png)
+
+```
+connection_requests: 这个TCP连接上执行的请求数
+proxy_protocol 是为了解决像realip 协议经过多层的 反向代理去的用户真实的IP而设置的，http 协议可以通过 X-Real-Ip 或 X-Rorwarded-For 去的客户的真实IP，而TCP协议没有这样的头部解决方案；proxy_protocol 在TCP层新增了一个协议头保存原始用户的头部
+```
+
+![1563440169250](assets/1563440169250.png)
+
+```
+TCP_INFO 包含tcp内核中的很多参数
+```
+
+![1563440660385](assets/1563440660385.png)
+
+![1563440707959](assets/1563440707959.png)
+
+![1563440738796](assets/1563440738796.png)
+
+![1563440819315](assets/1563440819315.png)
+
+##### 使用变量防盗链的referer模块
+
+![1563440918556](assets/1563440918556.png)
+
+![1563441047282](assets/1563441047282.png)
+
+![1563441235311](assets/1563441235311.png)
+
+```
+block 允许有referer 头部，但没有对应的值，可能是由于反向代理或防火墙配置不当导致
+```
+
+![1563441457797](assets/1563441457797.png)
+
+![1563441582591](assets/1563441582591.png)
+
+![1563441768769](assets/1563441768769.png)
+
+```
+referer: http://www.taohui.org.cn/ttt 没有匹配的项，只有个 http://www.taohui.org.cn/nginx/
+```
+
+![1563441849937](assets/1563441849937.png)
+
+```
+因为 *.taohui.pub 的泛域名的存在
+```
+
+![1563441903963](assets/1563441903963.png)
+
+```
+相当于匹配到了 block 选项，存在referer，但值为空
+```
+
+![1563441954944](assets/1563441954944.png)
+
+```
+相当于匹配 none
+```
+
+![1563441980703](assets/1563441980703.png)
+
+```
+没有任何的www.taohui.tech ,虽然有 server_names 但server_name 为 referer.taohui.tech
+```
+
+![1563442105938](assets/1563442105938.png)
+
+```
+匹配的是server_names
+```
+
+![1563442138765](assets/1563442138765.png)
+
+```
+没有百度的
+```
+
+![1563442174595](assets/1563442174595.png)
+
+```
+google 通过正则表达式进行了匹配
+```
+
+##### 使用变量实现防盗链功能实践：secure_link 模块
+
+![1563442279828](assets/1563442279828.png)
+
+![1563442781671](assets/1563442781671.png)
+
+![1563442862378](assets/1563442862378.png)
+
+![1563442897043](assets/1563442897043.png)
+
+![1563443021775](assets/1563443021775.png)
+
+![1563443240528](assets/1563443240528.png)
+
+```
+curl 请求返回的 1（表示验证通过） 是secure_link 的变量值
+openssl 生成的md5 需要按照 '时间戳 uri remote_ip 密钥'  生成
+secure_link_md5 设置 MD5 的生成顺序
+secure_link 设置请求的参数配置
+```
+
+![1563443554287](assets/1563443554287.png)
+
+![1563443569727](assets/1563443569727.png)
+
+![1563443618116](assets/1563443618116.png)
+
+![1563443690307](assets/1563443690307.png)
+
+```
+secure_link_secret 设置使用的密钥
+$secure_link 为空，则验证不通过，通过的话则 rewrite 到 原先实际的链接
+```
+
+![1563443892201](assets/1563443892201.png)
+
+```
+生成md5 位置的字符串		
+```
+
+![1563444081845](assets/1563444081845.png)
+
+##### 为复杂的业务生成新的变量：map模块
+
+![1563444288123](assets/1563444288123.png)
+
+![1563444407590](assets/1563444407590.png)
+
+```
+map string $variable { case ... default ...}
+原始变量的值或字符串： string
+$variable: case 选中的情况下，把后面的值放入到 variable 变量中去
+```
+
+![1563444637229](assets/1563444637229.png)
+
+![1563444754564](assets/1563444754564.png)
+
+```
+map $http_user_agent $mobile {
+	default 0;		
+	"~Opera Mini" 1;
+}
+当 $http_user_agent 匹配到 "~Opera Mini"时，把 mobile 改为1；默认为0。
+```
+
+![1563444938107](assets/1563444938107.png)
+
+![1563445245573](assets/1563445245573.png)
+
+```
+泛域名优先于正则表达式，泛域名中 前缀有限与后缀；所以匹配的是 *.taohui.org.cn	
+```
+
+![1563445411103](assets/1563445411103.png)
+
+```
+只有正则表达式匹配上
+```
+
+![1563445448326](assets/1563445448326.png)
+
+```
+完全匹配的优先级最高
+```
+
+##### 通过变量指定少数用户实现AB测试：split_client模块
+
+```
+此模块可以根据变量的值，根据百分比的形式生成新的变量
+
+产品推出了多个版本的功能，让某个百分比的用户尝试不同的版本，进行不同版本的反馈
+```
+
+![1563445622130](assets/1563445622130.png)
+
+![1563445830240](assets/1563445830240.png)
+
+![1563445901464](assets/1563445901464.png)
+
+![1563446031728](assets/1563446031728.png)
+
+```
+通过头部传入的testcli 参数落的 范围，进行复制 variant；后续可以根据 variant 变量判断，将请求导入到不同的版本
+```
+
+##### 根据IP地址的范围的匹配生成新的变量：geo模块
+
+![1563446331666](assets/1563446331666.png)
+
+![1563448502790](assets/1563448502790.png)
+
+![1563448940948](assets/1563448940948.png)
+
+![1563448982935](assets/1563448982935.png)
+
+```
+address 默认从 remote ip 取出IP
+指定了proxy 后，从 X-Forward-For 取出IP地址
+```
+
+![1563449191809](assets/1563449191809.png)
+
+```
+取的address 为 192.168.1.123 则 返回的变量为UK
+```
+
+![1563449268105](assets/1563449268105.png)
+
+```
+address 为 10.1.0.0 ，则取RU
+```
+
+![1563449318519](assets/1563449318519.png)
+
+```
+取到127.0.0.1 则匹配子网掩码的规则（127.0.0.1/32），为RU
+```
+
+##### 使用变量获取用户的地理位置：geoip模块
+
+![1563449857708](assets/1563449857708.png)
+
+![1563450683860](assets/1563450683860.png)
+
+```
+geoip_country 指定maxmind 中的国家类的IP地址文件
+geoip_proxy 提供了一个可信地址
+```
+
+![1563450868283](assets/1563450868283.png)
+
+```
+geoip_city 是 geoip_country的超集
+```
+
+![1563450936279](assets/1563450936279.png)
+
+![1563451086506](assets/1563451086506.png)
+
+```
+编译生成GeoIP.dat 的数据库
+```
+
+![1563451151576](assets/1563451151576.png)
+
+```
+加入了geoip_proxy 后，可以取得http 头部的 x-forwarded-for 的地址
+```
+
+![1563451265607](assets/1563451265607.png)
+
+![1563451299584](assets/1563451299584.png)
+
+##### 客户端使用keepalive 提升连接效率
+
+![1563451378927](assets/1563451378927.png)
+
+![1563451655360](assets/1563451655360.png)
+
+```
+keepalive_disable 针对什么浏览器禁用keepalive
+keepalive_requests 一个TCP连接上最多执行多少个请求
+keepalive_timeout 第一个timeout 是一个TCP连接之后，最多这个连接保持的时间，第二个timeout是 服务端设置的 Keep-Alive 头部的值，告诉客户端至少保持n秒
+```
+
+#### 第四章 反向代理与负载均衡
+
+##### 反向代理与负载均衡原理
+
+![1563452551683](assets/1563452551683.png)
+
+![1563452602026](assets/1563452602026.png)
+
+```
+X 轴扩展（水平扩展）：服务是无状态的，不论起多少个服务，同等的为客户提供服务；round-robin 和 least-connected 是标准的基于水平扩展的算法；水平扩展不能解决数据量大的问题，单台的数据量过大，无论扩展多少台，依旧数据量很大。
+Y 轴扩展（垂直扩展）：基于功能上进行拆分，原先基于一台应用服务处理的功能，拆分为多个应用服务分别处理不同的API接口（基于location 匹配不同的URL分发到不同的集群）
+Z 轴扩展：基于用户的信息进行扩展，根据用户名、IP等信息 引流到固定的集群,nginx 提供了较多的hash的算法来实现Z轴扩展
+```
+
+![1563453246803](assets/1563453246803.png)
+
+```
+七层的HTTP协议可以转换为上游的多种不同的协议
+```
+
+![1563453376805](assets/1563453376805.png)
+
+```
+基于时间的缓存：
+	第一个用户请求index.html 时，nginx本地没有，向上游服务器获取后，发给用户的同时，缓存一份到nginx的本地。第二个用户同样请求index.html nginx 直接从nginx的缓存中发送
+基于空间的缓存：
+	nginx 会预先拉去后端的资源到nginx的服务器
+```
+
+##### 负载均衡策略：round-robin
+
+```
+round-robin 是所有的负载均衡算法的基础，如果指定的其他的算法不生效，则退化为round-robin 算法
+```
+
+![1563453675601](assets/1563453675601.png)
+
+```
+upstream 会定义一个名字给后面的 反向代理模块使用
+server 是具体的处理业务的服务器
+```
+
+![1563453759951](assets/1563453759951.png)
+
+![1563454007096](assets/1563454007096.png)
+
+![1563454221120](assets/1563454221120.png)
+
+```
+proxy_http_version 1.1; 防止 下游请求使用的 1.0 的版本
+proxy_set_header Connection ""; 重新设置 keepalive 属性
+```
+
+![1563455089480](assets/1563455089480.png)
+
+![1563455146444](assets/1563455146444.png)
+
+```
+当使用域名去访问上游的服务的时候，可以使用resolver 指定一个自己的DNS服务
+```
+
+**上游服务器的配置**
+
+![1563455251302](assets/1563455251302.png)
+
+**负载均衡的nginx**
+
+![1563455320608](assets/1563455320608.png)
+
+```
+8011 的权重为2,8012 默认为1
+keepalive 32; 最多缓存32 个连接
+```
+
+![1563455418530](assets/1563455418530.png)
+
+![1563455562049](assets/1563455562049.png)
+
+```
+两次的请求共用一个的TCP连接，没有出现FIN断开连接
+```
+
+##### 负载均衡hash算法：ip_hash与hash模块
+
+![1563455778459](assets/1563455778459.png)
+
+![1563455904506](assets/1563455904506.png)
+
+![1563456002331](assets/1563456002331.png)
+
+```
+upstream 块 虽然指定了weight 但是不生效，会根据IP来做负载
+set_real_ip_from 设置代理服务的IP
+```
+
+![1563456461919](assets/1563456461919.png)
+
+![1563456570060](assets/1563456570060.png)
+
+```
+同一个来源的IP访问同一个后端，即使服务宕机了也访问这台服务
+```
+
+![1563456676623](assets/1563456676623.png)
+
+**自己构造字符串的hash模块**
+
+![1563456717383](assets/1563456717383.png)
+
+![1563456805102](assets/1563456805102.png)
+
+![1563456836704](assets/1563456836704.png)
+
+##### 一致性hash算法：hash模块
+
+```
+之前的hash 当服务器的数量发生变化的时候，会造成大量的服务路由信息失效，而一致性hash算法可以缓解这个问题
+```
+
+![1563457043200](assets/1563457043200.png)
+
+![1563457121663](assets/1563457121663.png)
+
+```
+服务宕机或扩容的时候，路由的变更，会导致大量的缓存失效
+```
+
+![1563457215550](assets/1563457215550.png)
+
+```
+首先有一个 0 到 2^32 次方的 数字环，四个节点均匀的散落在环上；如，当键计算hash 散落在1/4（node3） 到 2/4(node4) 之间则由临近他的逆时针方向的node3 进行处理, 落到其他区间的类推
+```
+
+![1563457334280](assets/1563457334280.png)
+
+```
+当添加节点node5 时，之后影响node5到node2 之间的key的访问到node5上,减少了影响的范围
+```
+
+![1563458017082](assets/1563458017082.png)
+
+```
+在配置hash 的时候 指定 consistent 就可以设置一致性hash环
+```
+
+##### 最少连接算法以及如何跨worker进程生效
+
+![1563460288015](assets/1563460288015.png)
+
+![1563460376565](assets/1563460376565.png)
+
+![1563460687616](assets/1563460687616.png)
+
+##### http upstream模块提供的变量
+
+![1563460883911](assets/1563460883911.png)
+
+![1563460946856](assets/1563460946856.png)
+
+##### http 反向代理proxy处理请求的流程
+
+![1563461115470](assets/1563461115470.png)
+
+```
+proxy_buffering: 开启之后，会把 请求的包体读取完毕之后缓存之后发送到上游，关闭的话，则边读取边发送
+```
+
+##### proxy模块的proxy_pass 指令
+
+![1563461533478](assets/1563461533478.png)
+
+![1563461564278](assets/1563461564278.png)
+
+**上游的服务器**
+
+![1563461926861](assets/1563461926861.png)
+
+![1563462011906](assets/1563462011906.png)
+
+```
+不添加URI，上游收到的uri 为原封不动的
+```
+
+![1563462083310](assets/1563462083310.png)
+
+```
+得到的仍是 /a/b/c
+```
+
+![1563462160061](assets/1563462160061.png)
+
+```
+请求的 uri /a/b/c 中的a 被proxy_pass 的www 进行了替换
+```
+
+##### 根据指令更改发往上游的请求
+
+![1563462311783](assets/1563462311783.png)
+
+```
+更改上游的 请求方法和http版本的头部信息
+```
+
+![1563462405906](assets/1563462405906.png)
+
+```
+proxy_set_header 修改或添加新的头部；需要注意默认的两个值 Connection 和 Host，如果 $proxy_host 的值为空，则默认的不会发送这条head Host的值，而不是 Host: ""
+
+proxy_pass_request_headers 是否要把用户请求的头部发送到上游
+```
+
+![1563462763999](assets/1563462763999.png)
+
+```
+proxy_pass_request_body 是否要把用户请求的body发送到上游
+proxy_set_body 是否自定义设置body
+```
+
+**上游服务器配置**
+
+![1563462897429](assets/1563462897429.png)
+
+**nginx配置**
+
+![1563463854726](assets/1563463854726.png)
+
+![1563463929612](assets/1563463929612.png)
+
+```
+不设置proxy配置的参数
+```
+
+![1563464029856](assets/1563464029856.png)
+
+```
+改动方法名为POST， version 改为1.1 ， request_header 不进行传递
+```
+
+![1563464102305](assets/1563464102305.png)
+
+```
+可以看到 method 为post 协议为1.1  http_name 不能取到 值了
+```
+
+![1563464278188](assets/1563464278188.png)
+
+```
+proxy_set_body 设置body为 "hello world!"
+```
+
+![1563464545909](assets/1563464545909.png)
+
+![1563464421497](assets/1563464421497.png)
+
+```
+查看到8012的请求 的body 
+```
+
+##### 接受用户请求包体的方式
+
+![1563464642293](assets/1563464642293.png)
+
+![1563464710533](assets/1563464710533.png)
+
+```
+在接受head时 可能接受到了一部分的body，如果body比较小，是全部的包体了，则不需要分配client_body_buffer_size 的内存；
+剩余待接收的包体长度(content-length的大小 - 已接受的)小于 client_body_buffer_size的大小，分配所需的大小的内存；
+其余的按照 client_body_buffer_size 设置的大小，一点点的读取body，如果存在proxy_buffering on;则缓存再发送，off 则立即发送到上游
+
+client_body_in_single_buffer 开启的话则，request_buffer 的变量可以使用了	 
+```
+
+![1563464883526](assets/1563464883526.png)
+
+![1563465871011](assets/1563465871011.png)
+
+```
+client_body_temp_path 定义body 的缓存目录，level1 level2 是指定缓存目录的目录级别
+client_body_in_file_only： on 所有的body缓存到文件中在请求完成之后也不删除，clean 用户请求body必须缓存到文件，请求处理完成之后就会删除， off 请求body小于buffer则不会缓存到文件，大于buffer的缓存会在请求之后删除body缓存
+```
+
+![1563466706277](assets/1563466706277.png)
+
+##### 与上游服务建立连接
+
+![1563466895299](assets/1563466895299.png)
+
+```
+proxy_connect_timeout 默认 60s, 当nginx 与上游的服务在60s内没有建立连接的话，nginx 会返回自己的502状态码
+
+proxy_next_upstream http_502: 当nginx 产生502 的请求码之后，可以更换一个上游的服务器继续处理这个请求
+```
+
+![1563467316685](assets/1563467316685.png)
+
+```
+TCP 层的keepalive 是在数据停止发送一个定时器的时长之后，会发送一个探测包，探测这个连接是否还继续维持，这个是操作系统维持的长连接
+```
+
+![1563467572040](assets/1563467572040.png)
+
+![1563467614406](assets/1563467614406.png)
+
+```
+proxy_bind 的两类用途：
+	1. 当nginx的上游有多个的IP地址时（内网或外网），不适用系统帮我们选择的IP地址，而主动指定一个IP地址
+	2. 很可能为了传递一个IP地址（透传IP地址的策略）即：proxy_bind $remote_addr ，如果指定的IP地址不属于所在的机器的IP地址，则需要添加 transparant
+
+原理: 更改TCP头的 source IP Address，上游收到的IP地址就位更改后的IP地址
+```
+
+![1563467719420](assets/1563467719420.png)
+
+```
+如果 设置为on，则可能客户端与nginx的连接已经关闭，但是nginx与上游的服务器的连接还进行维持
+```
+
+![1563468278553](assets/1563468278553.png)
+
+##### 接受上游的响应
+
