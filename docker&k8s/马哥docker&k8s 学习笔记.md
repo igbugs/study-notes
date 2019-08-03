@@ -870,3 +870,262 @@ args 执行 httpd 启动的一些参数，-f 前台运行，-h 执行家目录�
 上面的图片的配置是无法创建成功的，因为 容器的command 命令运行 httpd 服务的时候需要 /data/web/html 而此时 这个文件还没有创建，所以一直报错
 ```
 
+#### Pod 控制器
+
+```
+RealicationController: 
+ReplicaSet:	新一代的 RealicationController
+	是用户创建的pod副本一直满足于用户的期望数量，支持扩缩容机制
+Deployment： 
+	工作在 ReplicaSet 之上，通过控制 ReplicaSet 控制pod, 比ReaplicaSet 有更多的功能，额外支持滚动更新，回滚
+DaemonSet: 
+	用于确保集群中的每一个的节点运行一个副本，比如日志收集的filebeat agnet 类的服务，通常为 系统级的后台任务，只要新增节点都会添加相应的DaemonSet 定义的pod
+	只适用于无状态的应用, 
+Job：
+	只适用于只执行一次作用
+CronJob:
+	定时的执行任务
+StatefulSet:
+	有状态的，有数据的，不能随意启动一个副本替代的
+
+TPR: Third Party Resources, 1.2+ - 1.7	第三方资源
+CDR: Custom Defined Resources, 1.8+  用户自定义资源
+
+Operator: 把运维技能灌输进来
+```
+
+**RC 与 RS**
+
+![1564716909909](assets/1564716909909.png)
+
+#### ReplicaSet 清单的创建
+
+![1564718054056](assets/1564718054056.png)
+
+```
+ReplicaSet 通过 selector 去管理pod，查看pod 的数量，监控
+template 下面定义的是 pod 的一些信息，其中 metadata 的labels 必须含有 RS 中 selector 的标签，要不然 RS 发现，没有相应的标签会一直进行创建。
+```
+
+![1564718249399](assets/1564718249399.png)
+
+```
+pod 的命名方式为 控制器 RS的名称，加上一个随机的字符串
+```
+
+![1564718337259](assets/1564718337259.png)
+
+**直接编辑RS的资源**
+
+![1564718726843](assets/1564718726843.png)
+
+```
+把replicas更改为5个
+```
+
+**更改容器的版本为v2**
+
+![1564718816998](assets/1564718816998.png)
+
+![1564718873710](assets/1564718873710.png)
+
+```
+此时的pod 的依然为v1， 只有在重建是才为 v2
+```
+
+![1564718932149](assets/1564718932149.png)
+
+```
+此时就可以人为的 手动的删除响应的pod，自动创建后为新版白的，进行金丝雀（灰度）的发布。
+
+蓝绿部署：新建另一个RS部署完成后，再把service导入到部署完成后的服务
+```
+
+**deployment 实现的滚动发布**
+
+![1564719478195](assets/1564719478195.png)
+
+```
+在v2 版本的所有pod 创建完成后 RS v1 并不会删除，便于回滚
+```
+
+![1564719711859](assets/1564719711859.png)
+
+![1564719818558](assets/1564719818558.png)
+
+```
+一个Deployment 可以管理多个的 RS，只有一个RS 处于活跃的状态，默认保留10个 RS版本
+Deployment 还可以控制更新的节奏和更新逻辑
+```
+
+#### Deployment 更新策略
+
+![1564722756982](assets/1564722756982.png)
+
+![1564722825860](assets/1564722825860.png)
+
+```
+rollingUpdate: 
+	maxSurge: 更新过程中，最多超出目标副本数几个，可以使用数量个 百分比
+	maxUnavailable: 最多可以有多少个不可用
+```
+
+#### Deployment 清单配置
+
+![1564723115382](assets/1564723115382.png)
+
+![1564723171483](assets/1564723171483.png)
+
+```
+apply 是一种 声明式更新，既可以创建，也可以更新，可以执行多次，不像create 创建一次，在创建会报错
+```
+
+![1564723305650](assets/1564723305650.png)
+
+```
+deployment 的名称是在 配置清单中定义的
+rs 由 deployment 创建，它的名字由 deployment的名字，加上 模板（template）清单的哈希值 进行定义
+pods 的名字则由 rs 的名字，后面跟上随机的字符串
+```
+
+![1564723502032](assets/1564723502032.png)
+
+```
+更改副本为3个，可以看到 RS的名字的hash 值没有变化，因为 deployment中的 template 定义没有变化
+```
+
+![1564723657807](assets/1564723657807.png)
+
+```
+annotations 在每次的更新之后，会记录版本的变化
+默认的更新策略为 RollingUpdate
+```
+
+#### **更改配置文件为v2**
+
+![1564723821605](assets/1564723821605.png)
+
+![1564723837729](assets/1564723837729.png)
+
+```
+重新apply 改动，进行更新
+```
+
+![1564723899927](assets/1564723899927.png)
+
+```
+创建新的 pod 进入到 pending 状态，可以看到RS的名字 改变了，因为 模板（template）进行了变动，hash值改变
+```
+
+![1564724096108](assets/1564724096108.png)
+
+```
+老版本的 RS 仍然还在，方便回滚
+```
+
+#### **查看Deployment myapp-deploy 的历史版本**
+
+![1564724248709](assets/1564724248709.png)
+
+#### 通过 patch 的方式更新
+
+![1564724406013](assets/1564724406013.png)
+
+![1564724614368](assets/1564724614368.png)
+
+#### 使用pause 在更新一个后暂停更新
+
+![1564724786088](assets/1564724786088.png)
+
+![1564724831157](assets/1564724831157.png)
+
+```
+可以看到 在更新一个后，暂停更新，模拟了金丝雀发布。
+```
+
+![1564724916165](assets/1564724916165.png)
+
+```
+使用 rollout status 也可以查看 更新的状态
+```
+
+#### 使用 resume 更新其余的
+
+![1564725078587](assets/1564725078587.png)
+
+![1564725105155](assets/1564725105155.png)
+
+![1564725007306](assets/1564725007306.png)
+
+![1564725026436](assets/1564725026436.png)
+
+```
+看到 所有的都更新到了 v3 版本
+```
+
+#### rollout undo 进行版本的回滚
+
+![1564725301324](assets/1564725301324.png)
+
+```
+回滚到第一版之后，在回滚则回滚到上一版则是 第三版本
+```
+
+![1564725358373](assets/1564725358373.png)
+
+#### DaemonSet的清单配置
+
+![1564725810812](assets/1564725810812.png)
+
+```
+kind 的类型为 DaemonSet 
+使用的镜像为 filebeat，这个镜像需要存在环境变量 REDIS_HOST 和 REDIS_LOG_LEVEL
+```
+
+![1564725904281](assets/1564725904281.png)
+
+```
+可以看到创建了分割的 ds 的pod，因为 worker节点有两个，master节点允许创建pod
+```
+
+#### 多个相关联的pod 定义在一个资源清单文件中
+
+![1564726091086](assets/1564726091086.png)
+
+```
+使用 --- 进行隔开
+```
+
+#### 对DaemonSet 资源进行更新
+
+![1564726668576](assets/1564726668576.png)
+
+### k8s 中的Service 资源
+
+```
+service的实现模式：
+	1. userspace 在用户空间依靠kube-proxy 进程代为转发，淡然也依赖于iptables 规则，过于低效
+	2. iptables  从用户空间转向讷河空间
+	3. ipvs 1.11 版本后默认使用ipvs，
+```
+
+**开启ipvs 负载**
+
+![1564727257689](assets/1564727257689.png)
+
+```
+service的四种类型：
+	1. ClusterIP ：只能在集群的内部进行访问
+	2. NodePort: 
+		client -> NodeIP:NodePort -> ClusterIP:ServicePort -> PodIP:containerPort
+		这种方式需要将流量接入到 集群的所有的NodeIP 上分散请求压力。在NodeIP 和NodePort 之前添加 负责局衡器。
+	3. LoadBalancer: 只有在公有云上才能使用，并支持LBAAS,就可以利用底层的 api 创建负载均衡
+	4. ExternalName： 把集群外部的服务映射进集群内部，当pod 需要访问集群外部的服务的时候
+		FQDN 的名称：主机名或域名，通常是别名记录
+			CNAME 记录 -> 真正的FQDN
+			内部定义个内部的名称，经CoreDNS 解析后CNAME到 真正的外部服务的地址
+
+No ClusterIP : Headless Service 
+	会把servername 直接解析到 PodIP ,本来应该解析到，serviceIP 的。
+```
+
