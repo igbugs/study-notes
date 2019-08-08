@@ -1103,13 +1103,194 @@ kind 的类型为 DaemonSet
 ### k8s 中的Service 资源
 
 ```
-service的实现模式：
-	1. userspace 在用户空间依靠kube-proxy 进程代为转发，淡然也依赖于iptables 规则，过于低效
-	2. iptables  从用户空间转向讷河空间
-	3. ipvs 1.11 版本后默认使用ipvs，
+为了个客户端提供固定的访问端点，在客户端和服务pod 之间添加了固定的中间层，这个中间层为 service，这个service 严重的依赖于在k8s 集群上安装的 coreDNS 服务。
+service的 名称解析强依赖与 coreDNS。
+
+kubernetes 要想向客户端提供网络功能，需要依赖于第三方的网络方案，这个第三方的方案可通过CNI 容器网络插件提供的标准接口，接入遵循这种接口标准的第三方网络方案。
+
+kubernetes 中的三种网络：
+	1. node network
+	2. pod network
+	3. cluster network(service network)
+	前两种都是实实在在的配置在 网卡接口上（无论是物理网卡还是虚拟网卡），而service 网络是 virtual ip，由iptables 或 ipvs 实现数据包的转发路由。
 ```
 
-**开启ipvs 负载**
+![1565074633787](assets/1565074633787.png)
+
+```
+在节点上安装的 kube-proxy 时刻的watch master结点的 api servver 关于 service 资源的变化，如果存在变化，则会在节点进行 iptables 或 ipvs 的规则的创建。
+```
+
+#### service 实现的三种方式
+
+```
+service的实现模式：
+	1. userspace 在用户空间依靠kube-proxy 进程代为转发，当然也依赖于iptables 规则，过于低效。1.1版本之前
+	2. iptables  从用户空间转向内核空间，1.10版本之前
+	3. ipvs 1.11 版本后默认使用ipvs
+```
+
+1. **userspace 方式**
+
+   ![1565075018629](assets/1565075018629.png)
+
+   ```
+   client的请求到达 service 后，service 转发到本地节点 kube-proxy 监听的套接字，然后再由kube-proxy 转发请求到service，service 在代理到 服务pod 的kube-proxy 再由其转发到相应的节点。
+   这种方式的效率很低，因为先要到内核空间，再到用户空间，再要到内核空间，用户空间和内核空间之间相互转换。
+   ```
+
+2. **iptables 方式**
+
+   ![1565075866201](assets/1565075866201.png)
+
+   ```
+   client 的请求直接请求service ip，被本地的内核中的 iptables 的规则所截取，进而直接调度给 service 后端相应的 pod。
+   这种方式 直接工作在 内核空间，由iptables 规则进行调度。
+   ```
+
+3. **ipvs**
+
+   ![1565076050384](assets/1565076050384.png)
+
+   ```
+   使用 ipvs 替换了iptables 的进行 报文的转发。	
+   ```
+
+```
+如果某个服务后面的pod资源发生了改变，比如 service 的抱歉选择器适用的版本有多了一个pod，这个pod 的适用的信息会立即反馈到 api server上，kube-proxy 一定会watch 到这种变化，并立即转换为结点的 iptables/ipvs 规则。
+```
+
+#### 创建service 资源
+
+![1565078071408](assets/1565078071408.png)
+
+![1565077934751](assets/1565077934751.png)
+
+```
+ndoePort 节点的端口
+port	向外暴露的端口
+targetPort  容器的端口
+```
+
+**service 的配置清单**
+
+![1565078337918](assets/1565078337918.png)
+
+```
+type: 指定service 的类型，默认就位 ClusterIP
+clusterIP 最好不要指定，让集群自动分配
+```
+
+![1565078391828](assets/1565078391828.png)
+
+```
+selector 通过标签的匹配，得出到 后端的 endpoints 为 10.244.1.32::6379
+
+实际上 service 不是直接到 pod 资源的，中间还有个 endpoint 资源（就是 ip:port）,实际上可以手动的创建 endpoint 资源。
+```
+
+#### DNS的资源记录格式
+
+```
+资源记录：
+	SVC_NAME.NS_NAME.DOMAIN.LTD
+	
+	kubernetes 默认的域名后缀：svc.cluster.local.
+	redis 在 default 的名称空间中的：
+		redis.default.svc.cluster.local.
+```
+
+#### 创建NodePort 类型
+
+![1565079105321](assets/1565079105321.png)
+
+![1565079268135](assets/1565079268135.png)
+
+```
+指定 type为 NodePort 
+nodePort 最好不要指定，会进行动态分配
+selector 指定 标签 app=myapp,release=canary  就可以选择所有的 myapp 的pod
+```
+
+![1565079391187](assets/1565079391187.png)
+
+![1565079454175](assets/1565079454175.png)
+
+```
+集群外进行访问，可以看到 myapp 的进行负载均衡
+```
+
+#### LoadBalancer 
+
+![1565080324600](assets/1565080324600.png)
+
+```
+LoadBalancer 是比如在 阿里云 购买了 VPS 主机部署了 kubernetes 集群，这个 kubernetes 集群可以与底层的 公有云IAAS进行交互，调用底层的IAAS的底层的云计算的API，请求创建一个 外置的 负载均衡器（LBAAS服务提供），在创建 SLB的过程中 提供 后的的NodePort 的ip和端口，自动映射到相应的后端服务。 
+```
+
+#### ExternalName 
+
+![1565081740613](assets/1565081740613.png)
+
+```
+ExternalName 一定要能被 DNS 服务所解析
+```
+
+![1565081860036](assets/1565081860036.png)
+
+```
+extrtnalName 是一个CNAME
+```
+
+#### 开启 sessionAffinity
+
+![1565081992605](assets/1565081992605.png)
+
+![1565082005297](assets/1565082005297.png)
+
+```
+改动之后，相同的IP之后请求到同一个后端服务，默认置为 None
+```
+
+![1565165967238](assets/1565165967238.png)
+
+![1565165985995](assets/1565165985995.png)
+
+#### headless service 
+
+```
+service 的地址不在是 clusterIP, 而是直接到后端的 PodIP 
+```
+
+![1565166240604](assets/1565166240604.png)
+
+```
+地拽 clusterIP 为 None 的时候，则为 headless service
+```
+
+**headless 清单配置**
+
+![1565166462784](assets/1565166462784.png)
+
+```
+service 的名字更改为 myapp-svc, clusterIP 置为 None
+```
+
+![1565166594571](assets/1565166594571.png)
+
+**查看myapp-svc service 的解析地址**
+
+![1565166843338](assets/1565166843338.png)
+
+**CoreDNS 记录着集群的DNS的解析**
+
+![1565166877708](assets/1565166877708.png)
+
+![1565166917019](assets/1565166917019.png)
+
+### kubernetes ingress 及 ingress controller
+
+#### **开启ipvs 负载**
 
 ![1564727257689](assets/1564727257689.png)
 
@@ -1119,13 +1300,570 @@ service的四种类型：
 	2. NodePort: 
 		client -> NodeIP:NodePort -> ClusterIP:ServicePort -> PodIP:containerPort
 		这种方式需要将流量接入到 集群的所有的NodeIP 上分散请求压力。在NodeIP 和NodePort 之前添加 负责局衡器。
-	3. LoadBalancer: 只有在公有云上才能使用，并支持LBAAS,就可以利用底层的 api 创建负载均衡
+	3. LoadBalancer: 只有在公有云上才能使用，并支持LBAAS, k8s 就可以调用IAAS底层的 api来创建负载均衡
 	4. ExternalName： 把集群外部的服务映射进集群内部，当pod 需要访问集群外部的服务的时候
 		FQDN 的名称：主机名或域名，通常是别名记录
 			CNAME 记录 -> 真正的FQDN
 			内部定义个内部的名称，经CoreDNS 解析后CNAME到 真正的外部服务的地址
 
 No ClusterIP : Headless Service 
-	会把servername 直接解析到 PodIP ,本来应该解析到，serviceIP 的。
+	会把servername 直接解析到 PodIP ,本来应该解析到，serviceIP（clusterIP） 的。
 ```
+
+#### kubernetes 中的七层代理实现
+
+```
+可以看到 service 是四层的调度，无论是iptables 还是 ipvs 都是在四层进行调度，工作在TCP/IP 协议栈，如果用户访问的是http请求，那么service 就很难进行负载。
+```
+
+```
+进行这样的假设: 服务经过LVS进行负载，后端是http 的服务，那么配置https 服务的时候，就必须把 ssl 的证书配置在 后端的服务上，因为LVS 是四层的调度，无法对七层的数据包进行解析。
+
+客户端建立连接是与LVS进行的，而ssl 的会话却要与后端的服务进行，所以证书的域名解析 到底是配置在 LVS的 VIP还是后端的主机服务，就会出现问题。
+由于调度器LVS 无法解析ssl会话，客户端必须要与后端的服务建立ssl会话，但是当下次请求到下一台的机器的时候，之前建立的ssl会话将失效。
+
+所以使用 七层的负载均衡器 替代 LVS，由七层的负载均衡器作为卸载器解出ssl 会话，然后后端进行http 的连接
+```
+
+**实现方案一**
+
+![1565171596656](assets/1565171596656.png)
+
+```
+客户带访问 外部的 LB，调度到kubernetes 的节点后（service 实现的nodePort类型，负载 代理的pod），每个节点存在一个 pod 专门负责七层的代理，负责代理到后端的pod服务上
+```
+
+**实现方案二**
+
+```
+让七层代理的pod 共享Node节点的网络名称空间（namespace），就可以省掉 service的 代理层，边界流量直接就可以进入到 七层代理的pod。
+容器共享宿主机的网络名称空间之后，容器内的进程，监听的socket 就是宿主机的socket
+```
+
+![1565172199175](assets/1565172199175.png)
+
+```
+这样就要求 七层代理的pod 在每一个的节点上都运行，这个时候 DaemonSet 控制器就可以有用武之地了，在kubernetes 中的每个节点都运行 七层代理pod，如果集群的集群 比较多，可以给特定的节点打上污点，指定运行的代理pod 的节点，别的pod 不能运行在有这些污点的机器上。
+```
+
+**最终方案**
+
+![1565172730005](assets/1565172730005.png)
+
+```
+这个代理http流量的pod 被称为 ingress controller
+ingress controller 是独立运行的一组 pod资源，通常就是一组应用程序，拥有七层调度代理能力的应用。
+ingress 服务，有三种选择：
+	1. nginx
+	2. traefik
+	3. envoy(微服务倾向使用envoy)
+```
+
+#### ingress 实现
+
+![1565231306467](assets/1565231306467.png)
+
+```
+ingress 和 ingress controller 是不同的两个概念，我们在定义ingress 的时候回定义我们期望的ingress controller 是如何给我们建立一个前端（可能是虚拟主机或基于URL的映射），又会定义一个后端（upstream server）, 后端pod 的服务资源。后端的upstream server 有多少个主机，是由定义的 后端 pod 的service知道的，这个service没有流量调度的功能，只是为了通过标签确定 后端upstream server 的个数和ip.
+
+ingress 的作用是：一旦ingress 通过service 发现后端的pod 的资源发生了变化，这个改变会及时的反应到ingress 上，ingress 会及时的注入到 upstream 的配置文件中。
+如果是nginx 配置文件注入后需要进行重载，而 traefik 和envoy 天生为微服务而生则不需要重载，可以自己监控配置文件变化进行重载。
+```
+
+```
+要想在kubernetes使用七层的代理：
+	1. 部署ingress controller
+	2. 根据自己的需要，是使用虚拟主机的方式还是 URL映射的方式配置前端，再根据service 收集到的后端的pod 的IP 定义成upstream反应在ingress中，由ingress 动态的注入到ingress controller 中
+```
+
+![1565232230406](assets/1565232230406.png)
+
+```
+其中的<service> ingress-nginx 负责外部的流量导入到ingress controller，可以去除，使用DaemonSet 资源去运行 代理的pod，pod资源的网络设置为 host network的方式
+ingress 通过 <service> site1 和 <service> site2 获取后端 site1 和 site2 的后端资源，注入到 ingress controller 进行流量的调度。
+
+<service> site1 和 <service> site2 不会再调度的时候使用，只会去根据标签确定后端pod 的ip
+```
+
+![1565233878611](assets/1565233878611.png)
+
+```
+rules 定义 ingress controller 的调度规则
+```
+
+![1565233919549](assets/1565233919549.png)
+
+```
+rules 定义 host 和http，及使用虚拟主机 或 URL的映射方式进行调度
+```
+
+![1565234045923](assets/1565234045923.png)
+
+```
+backend 是定义后端 关联的 service 资源，由此知道后端的所有的pod资源
+```
+
+#### 配置ingress controller
+
+**下载需要的文件**
+
+![1565243257566](assets/1565243257566.png)
+
+![1565243303342](assets/1565243303342.png)
+
+##### kubernetes 创建名称空间
+
+**命令行创建名称空间示例**
+
+![1565234614187](assets/1565234614187.png)
+
+![1565234754239](assets/1565234754239.png)
+
+##### **直接apply 下载的清单 文件**
+
+![1565243378311](assets/1565243378311.png)
+
+![1565243724286](assets/1565243724286.png)
+
+**或者直接执行 mandatory 文件**
+
+```
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+
+---
+
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: nginx-configuration
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: tcp-services
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+
+---
+kind: ConfigMap
+apiVersion: v1
+metadata:
+  name: udp-services
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: nginx-ingress-serviceaccount
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRole
+metadata:
+  name: nginx-ingress-clusterrole
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - endpoints
+      - nodes
+      - pods
+      - secrets
+    verbs:
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - nodes
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - services
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - ""
+    resources:
+      - events
+    verbs:
+      - create
+      - patch
+  - apiGroups:
+      - "extensions"
+      - "networking.k8s.io"
+    resources:
+      - ingresses
+    verbs:
+      - get
+      - list
+      - watch
+  - apiGroups:
+      - "extensions"
+      - "networking.k8s.io"
+    resources:
+      - ingresses/status
+    verbs:
+      - update
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: Role
+metadata:
+  name: nginx-ingress-role
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+rules:
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+      - pods
+      - secrets
+      - namespaces
+    verbs:
+      - get
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    resourceNames:
+      # Defaults to "<election-id>-<ingress-class>"
+      # Here: "<ingress-controller-leader>-<nginx>"
+      # This has to be adapted if you change either parameter
+      # when launching the nginx-ingress-controller.
+      - "ingress-controller-leader-nginx"
+    verbs:
+      - get
+      - update
+  - apiGroups:
+      - ""
+    resources:
+      - configmaps
+    verbs:
+      - create
+  - apiGroups:
+      - ""
+    resources:
+      - endpoints
+    verbs:
+      - get
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: RoleBinding
+metadata:
+  name: nginx-ingress-role-nisa-binding
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: nginx-ingress-role
+subjects:
+  - kind: ServiceAccount
+    name: nginx-ingress-serviceaccount
+    namespace: ingress-nginx
+
+---
+apiVersion: rbac.authorization.k8s.io/v1beta1
+kind: ClusterRoleBinding
+metadata:
+  name: nginx-ingress-clusterrole-nisa-binding
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: nginx-ingress-clusterrole
+subjects:
+  - kind: ServiceAccount
+    name: nginx-ingress-serviceaccount
+    namespace: ingress-nginx
+
+---
+
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-ingress-controller
+  namespace: ingress-nginx
+  labels:
+    app.kubernetes.io/name: ingress-nginx
+    app.kubernetes.io/part-of: ingress-nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: ingress-nginx
+      app.kubernetes.io/part-of: ingress-nginx
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: ingress-nginx
+        app.kubernetes.io/part-of: ingress-nginx
+      annotations:
+        prometheus.io/port: "10254"
+        prometheus.io/scrape: "true"
+    spec:
+      serviceAccountName: nginx-ingress-serviceaccount
+      containers:
+        - name: nginx-ingress-controller
+          image: quay.io/kubernetes-ingress-controller/nginx-ingress-controller:0.25.0
+          args:
+            - /nginx-ingress-controller
+            - --configmap=$(POD_NAMESPACE)/nginx-configuration
+            - --tcp-services-configmap=$(POD_NAMESPACE)/tcp-services
+            - --udp-services-configmap=$(POD_NAMESPACE)/udp-services
+            - --publish-service=$(POD_NAMESPACE)/ingress-nginx
+            - --annotations-prefix=nginx.ingress.kubernetes.io
+          securityContext:
+            allowPrivilegeEscalation: true
+            capabilities:
+              drop:
+                - ALL
+              add:
+                - NET_BIND_SERVICE
+            # www-data -> 33
+            runAsUser: 33
+          env:
+            - name: POD_NAME
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.name
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+          ports:
+            - name: http
+              containerPort: 80
+            - name: https
+              containerPort: 443
+          livenessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+          readinessProbe:
+            failureThreshold: 3
+            httpGet:
+              path: /healthz
+              port: 10254
+              scheme: HTTP
+            periodSeconds: 10
+            successThreshold: 1
+            timeoutSeconds: 10
+
+---
+```
+
+```
+https://github.com/kubernetes/ingress-nginx/blob/master/docs/deploy/index.md
+
+kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/master/deploy/static/mandatory.yaml
+```
+
+**查看创建的ingress 的pod** 
+
+![1565246118629](assets/1565246118629.png)
+
+##### 准备部署后端pod 服务 和service
+
+![1565249576791](assets/1565249576791.png)
+
+```
+下面图片的service 的配置 少了 port: 80
+```
+
+![1565244359820](assets/1565244359820.png)
+
+![1565244382442](assets/1565244382442.png)
+
+**部署后的服务**
+
+![1565244923825](assets/1565244923825.png)
+
+##### 定义导入外部流量到 ingress 的service
+
+![1565246484774](assets/1565246484774.png)
+
+![1565246445863](assets/1565246445863.png)
+
+```
+这个service 的selector 为 ingres-nginx 的标签的pod 服务
+```
+
+![1565246570222](assets/1565246570222.png)
+
+**集群外部访问 这个 为 ingress 导入流量的service**
+
+![1565246667528](assets/1565246667528.png)
+
+```
+此时 ingress-nginx 的pod 并没有与后的的pod 的服务建立起连接
+```
+
+#### 把myapp的代码通过ingress 发布出去
+
+**ingres-myapp ingress配置清单**
+
+![1565247591952](assets/1565247591952.png)
+
+```
+kind: 为ingress
+名称空间需要和 后端的pod服务（deployment）和pod 的负载的service 所在的名称空间一样
+annotations: 指定ingress 的实现的方式 nginx，traefik，envoy等，键名必须是 kubernetes.io/ingress。class
+rules: 指定请求的转发规则
+path: 指定访问的路径，空 默认访问 / 根路径
+backend: 
+	serviceName : 指定后端pod 关联的service 名称
+	servicePort: 创建 service的时候，指定的service 的负载端口
+通过 service name 的 myapp 与相应的myapp的pod 服务相关联
+```
+
+![1565248252268](assets/1565248252268.png)
+
+**如果定义的是虚拟主机而不是URL映射**
+
+![1565247956033](assets/1565247956033.png)
+
+```
+直接在 rules.host 这一层及进行定义
+```
+
+##### 查看创建的ingress 的信息
+
+![1565248496245](assets/1565248496245.png)
+
+##### ingress 一旦应用自动注入后端的服务
+
+**进入到七层代理的ingress-nginx 的pod 查看nginx的配置**
+
+![1565248782847](assets/1565248782847.png)
+
+**nginx的配置文件**
+
+![1565248844296](assets/1565248844296.png)
+
+![1565248916339](assets/1565248916339.png)
+
+```
+自动生成的 后端myapp 的 upstream配置到 nginx
+```
+
+**添加本机的 myapp.magedu.com 解析到 ingress的外部流量导入的service（NodePort类型） **
+
+![1565249188365](assets/1565249188365.png)
+
+#### 使用ingress 部署 Tomcat服务
+
+**部署Tomcat 的 deployment 资源和service 资源**
+
+![1565249940213](assets/1565249940213.png)
+
+![1565249987069](assets/1565249987069.png)
+
+**ingress 的Tomcat 的配置**
+
+![1565250396791](assets/1565250396791.png)
+
+```
+定义的host 为 tomcat.magedu.com 默认的 为80 端口，注入ingress pod 的时候，把nginx 的80 转发到后端的8080 服务
+```
+
+**查看创建的ingress 资源**
+
+![1565250518778](assets/1565250518778.png)
+
+```
+ingress 注入rules的规则到 ingress-nginx-controller 的代理pod
+通过 外部的导入流量到 ingress-nginx 的service 进行访问，所以还是访问的 30080端口，前面定义的ingress-nginx 的service 的暴露的NodePort 的端口
+```
+
+![1565251041706](assets/1565251041706.png)
+
+##### 配置https 访问Tomcat
+
+**制作ssl证书**
+
+- **生成私钥**
+
+  ![1565251229090](assets/1565251229090.png)
+
+- **自签证书**
+
+  ![1565251327284](assets/1565251327284.png)
+
+**kubernetes 创建secret 资源**
+
+![1565251481632](assets/1565251481632.png)
+
+```
+tls : secret 的类型为tls
+tomcat-ingress-secret: secret 资源的名字
+--cert 证书的位置
+--key 私钥的位置
+```
+
+**配置证书的方式**
+
+![1565251656808](assets/1565251656808.png)
+
+```
+在tls.secretName 指定生成的secret的名字
+```
+
+**Tomcat TLS 的配置清单**
+
+![1565251854449](assets/1565251854449.png)
+
+![1565251930633](assets/1565251930633.png)
+
+**查看 ingress controller 的nginx pod 的配置**
+
+![1565252035630](assets/1565252035630.png)
+
+**Tomcat 已经可以https访问**
+
+![1565252099058](assets/1565252099058.png)
 

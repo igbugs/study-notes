@@ -2148,7 +2148,7 @@ proxy_buffering 控制是否 接受完整的包体后 发送，还是 实时的�
 ![1563522520985](assets/1563522520985.png)
 
 ```
-及时开启了 proxy_buffering 也不一定写入到 缓存文件，当包体 较小的时候；因为有proxy_buffers 的存在直接缓存在内存中，（32k 或 64k），大于设置的proxy_buffers 之后才可能缓存到磁盘。
+即使开启了 proxy_buffering 也不一定写入到 缓存文件，当包体 较小的时候；因为有proxy_buffers 的存在直接缓存在内存中，（32k 或 64k），大于设置的proxy_buffers 之后才可能缓存到磁盘。
 ```
 
 ![1563522866789](assets/1563522866789.png)
@@ -2159,7 +2159,7 @@ X-Accel-Buffering 这个是只有nginx才会识别的head， 上游的服务置�
 
 proxy_max_temp_file_size 最大的写入的缓存文件的大小
 proxy_temp_file_write_size 每次写入缓存文件的大小
-proxy_temp_path 设置缓存文件袋嗯路径，以及使用多少层级的目录
+proxy_temp_path 设置缓存文件存储路径，以及使用多少层级的目录
 ```
 
 ![1563524115584](assets/1563524115584.png)
