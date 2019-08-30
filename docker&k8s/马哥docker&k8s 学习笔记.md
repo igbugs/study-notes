@@ -2299,3 +2299,127 @@ secret的三种类型
 
 ### kubernetes statefulset 控制器
 
+```
+StatefulSet需要管理一下特征的服务：
+	1. 稳定，且需要唯一的网络标识符
+	2. 稳定且拥有持久的存储
+	3. 有序、平滑地部署和扩展
+	4. 有序、平滑的终止和删除
+	5. 有序的滚动更新（例如redis的主从版本更新，需要先更新从节点的版本，这样高版本兼容低版本，不会因为redis 的master更新为高版本后，从节点数据无法兼容）
+	
+StatefulSet 的三个组件：
+	1. headless service（确保解析的名称直达后端的pod 的IP）
+	2. StatefulSet 控制器
+	3. volumeClaimTemplate(存储卷申请模板)
+		网页的http服务，的后端存储可以共享的存储。而想redis集群中的各个节点的数据存储是不同的，不能使用共享存储去存储不同的节点角色的数据。
+		每一个集群节点角色的pod，都需要有专用的数据存储，所以使用volumeClaimTemplate 自动的进行PVC的创建以及PV的创建。
+```
+
+#### StatefulSet 配置
+
+**准备好PV存储**
+
+![1565688427239](assets/1565688427239.png)
+
+**配置清单**
+
+![1565687636106](assets/1565687636106.png)
+
+![1565687700753](assets/1565687700753.png)
+
+```
+clusterIP : None 定义为 无头的服务
+存储使用 volumeClaimTemplates 进行申请 PVC, 但是PV的创建需要首先创建完成，或者动态的供给。
+
+上面 template中定义的 pod的标签为 app: myapp-pod
+replicas 通过选择myapp-pod 控制副本为3个
+headless 通过选择myapp-pod 映射相应的服务
+```
+
+![1565688524834](assets/1565688524834.png)
+
+```
+StatefulSet 简称sts		
+```
+
+![1565688561992](assets/1565688561992.png)
+
+![1565688747112](assets/1565688747112.png)
+
+```
+replicas 定义pod 的副本数
+selector 哪些pod属于StatefulSet 管理
+serviceName 必须关联到某个无头的服务
+tempate 配置pod 的模板，其中对应的 存储卷（PVC类型） 需要下面的volumeClaimTemplates 定义创建生成PVC
+```
+
+![1565689663701](assets/1565689663701.png)
+
+```
+可以看到创建了 service后的myapp ,以及StatefulSet，还有自动创建的PVC，每一个pod对应一个
+PVC 的名字隐含了pod的名字 myapp-0
+```
+
+![1565690218828](assets/1565690218828.png)
+
+```
+kubernetes中的域名解析：
+	pod_name.service_name.ns_name.svc.cluster.local
+	
+```
+
+#### StatefulSet 的扩缩容
+
+**扩容**
+
+![1565690400420](assets/1565690400420.png)
+
+![1565690419299](assets/1565690419299.png)
+
+```
+先扩展3 在扩展4，按顺序进行扩展，缩容的话则按照逆序进行。
+```
+
+![1565690451757](assets/1565690451757.png)
+
+```
+满足5G的要求，因为5G的PV用完了，则分配10G的PV
+```
+
+****
+
+**缩容**
+
+![1565690580809](assets/1565690580809.png)
+
+![1565690606033](assets/1565690606033.png)
+
+#### 滚动更新
+
+![1565690894475](assets/1565690894475.png)
+
+```
+更新策略：
+	使用partition 去定位哪些pod需要更新，默认从第0 个更新到最后，如果定义为4，则只会更新4之后的pod
+```
+
+**设置partition位置**
+
+![1565691035873](assets/1565691035873.png)
+
+![1565691053749](assets/1565691053749.png)
+
+![1565691181202](assets/1565691181202.png)
+
+```
+使用 set image 去设置容器的镜像版本为v2
+```
+
+**查看更新的pod使用的镜像**
+
+![1565691306919](assets/1565691306919.png)
+
+![1565691329313](assets/1565691329313.png)
+
+### kubernetes认证及service account
+
