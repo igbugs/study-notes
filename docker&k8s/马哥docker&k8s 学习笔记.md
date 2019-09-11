@@ -1,4 +1,4 @@
-## 马哥docker 学习笔记
+马哥docker 学习笔记
 
 ### 容器的概念
 
@@ -2422,4 +2422,413 @@ kubernetes中的域名解析：
 ![1565691329313](assets/1565691329313.png)
 
 ### kubernetes认证及service account
+
+#### k8s 的账户类型
+
+```
+k8s 集群中的存在两类的账号：
+1. user account：
+	提供给用户（人）进行访问集群的账号
+2. service account：
+	提供给pod 访问api server 的登录控制
+```
+
+#### **创建k8s 资源清单的几种方式**
+
+1. 凡是可以使用 create 进行创建的资源，可以使用dry-run 的方式创建模板
+
+   ![1567407838489](assets/1567407838489.png)
+
+2. 使用已经存在的pod进行导出资源模板
+
+   ![1567407952862](assets/1567407952862.png)
+
+#### **获取系统中的serviceaccount（sa）**
+
+![1567408049430](assets/1567408049430.png)
+
+**创建serviceaccount**
+
+![1567408112630](assets/1567408112630.png)
+
+**查看创建的account 的信息**
+
+![1567408144242](assets/1567408144242.png)
+
+```
+可以看到secret 生成了admin 的信息
+
+这些只是k8s 的认证信息，认证只是代表可以连接登录到 K8s 但不是代表你可以进行资源的操作权限
+```
+
+![1567408459684](assets/1567408459684.png)
+
+```
+在default 的空间中创建的admin的账号，使用自定义的 serviceaccount 进行pod 的创建
+```
+
+#### **查看新创建的pod 的使用的账户信息**
+
+![1567408747129](assets/1567408747129.png)
+
+![1567408762146](assets/1567408762146.png)
+
+```
+使用的volume 是admin 的secret的信息
+
+在创建pod 的时候，可以指定imagePullSecrets 指定是使用的 secret的信息
+也可以使用 serviceAccountName 去指定SA的 账户信息，自动的吧secret 的信息挂载到pod 中
+```
+
+#### **查看kubectl 访问集群的账户配置**
+
+![1567410259379](assets/1567410259379.png)
+
+```
+cluster: 指定集群的认证和地址，集群名字信息
+context: 指定访问哪个集群使用哪个账户
+users: 所有的用户列表的信息，用户的名称，以及用户的私钥及证书信息等
+```
+
+#### **kubectl config --help 的帮助信息**
+
+![1567410611744](assets/1567410611744.png)
+
+```
+1. set-cluster 设定集群
+2. set-credentials 设定证书信息
+3. set-context 设定上下文
+4. use-context 设定当前使用的上下文
+```
+
+#### 自己签署证书进行登录验证
+
+**生成自己的私钥**
+
+![1567411494733](assets/1567411494733.png)
+
+**生成证书签署请求**
+
+![1567411671273](assets/1567411671273.png)
+
+```
+/CN 指定 名称，Common Name
+```
+
+**使用k8s 的ca 证书进行签署证书**
+
+![1567411994397](assets/1567411994397.png)
+
+```
+-CA 指定签发机构的根证书（用于签发用户请求）
+-CAkey 用于签发的机构的私钥
+-days 证书的有效期
+```
+
+**查看生成的证书的信息**
+
+![1567413060863](assets/1567413060863.png)
+
+```
+签发者和使用者的信息
+```
+
+**设置用户访问集群的证书信息**
+
+![1567413701668](assets/1567413701668.png)
+
+**查看config 的配置**
+
+![1567413739514](assets/1567413739514.png)
+
+```
+magedu 用户被配置
+```
+
+**设置magedu 访问集群**
+
+![1567413857908](assets/1567413857908.png)
+
+![1567413874048](assets/1567413874048.png)
+
+**切换使用magedu 访问集群**
+
+![1567413940883](assets/1567413940883.png)
+
+```
+magedu 没有管理员的权限
+```
+
+**设置集群的方式**
+
+![1567414037130](assets/1567414037130.png)
+
+![1567414278035](assets/1567414278035.png)
+
+```
+设置配置文件到其他的路径
+```
+
+![1567414307432](assets/1567414307432.png)
+
+### kubernetes RBAC 授权
+
+#### k8s 的授权插件
+
+```
+1. Node
+	节点的认证
+2. ABAC（Attribute-Based Access Control）
+	基于属性的访问控制
+3. RBAC（Role-Based Access Control）
+	基于角色的访问控制
+4. WebHook
+	基于Http的回调机制实现
+```
+
+#### k8s 新role 的配置
+
+![1567493943474](assets/1567493943474.png)
+
+```
+metadata:
+	name: 创建的role 的角色
+	namespace: 名称空间，默认为default
+apiGroup: 针对那些的api 组设置资源的权限
+resource: 可访问的资源
+verbs: 针对资源可以执行的动作
+```
+
+![1567494368212](assets/1567494368212.png)
+
+```
+限制资源时可以有三种方式：
+	1. 资源类别（resource），针对某一类的资源都可以操作
+	2. 资源名称（Resource Names）针对某一资源类别下的 某个（name选取）资源操作
+	3. Non-Resource URLs 不能定义为资源对象的操作
+```
+
+#### 绑定用户到某个role
+
+![1567494745118](assets/1567494745118.png)
+
+![1567494829021](assets/1567494829021.png)
+
+![1567495067861](assets/1567495067861.png)
+
+```
+查看default 名称空间下的pods资源
+```
+
+#### 创建Cluster Role
+
+![1567495242107](assets/1567495242107.png)
+
+![1567495555217](assets/1567495555217.png)
+
+![1567495583901](assets/1567495583901.png)
+
+#### 使用cluster role binding 进行clusterRole的绑定
+
+![1567495776950](assets/1567495776950.png)
+
+![1567495910045](assets/1567495910045.png)
+
+#### 可以读取不同名称空间的pod
+
+![1567496120382](assets/1567496120382.png)
+
+```
+一般情况下，使用 rolebinding 去绑定role，role拥有的是指定的名称空间的权限；
+使用clusterRoleBinding 去绑定 ClusterRole，拥有所有的名称空间的权限；
+使用rolebinding 去绑定ClusterRole的权限，则拥有rolebinding 所在名称空间的权限。
+```
+
+#### 使用 rolebinding 去绑定clusterRole
+
+![1567496681969](assets/1567496681969.png)
+
+![1567496766043](assets/1567496766043.png)
+
+```
+使用 rolebinding 去绑定clusterRole 后，则clusterRole 降级为RoleBinding 所在的名称空间
+```
+
+![1567496906367](assets/1567496906367.png)
+
+#### 进行权限测试
+
+![1567496928618](assets/1567496928618.png)
+
+```
+可以访问default 名称空间下的资源，不能访问ingress-nginx 名称空间
+```
+
+### kubernetes dashboard认证及分组授权
+
+#### k8s dashboard 安装
+
+![1567499348152](assets/1567499348152.png)
+
+#### 将服务映射到node节点
+
+![1567502629010](assets/1567502629010.png)
+
+#### 浏览器访问
+
+![1567502669054](assets/1567502669054.png)
+
+```
+提供两种方式的登录验证
+	kubeconfig 
+	token 令牌
+此处的dashboard 在kubernetes集群中运行为一个pod，所以它应该使用 service account的账户类型进行认证，不能使用user account 账户登录
+```
+
+#### 使用token进行登录
+
+##### 创建一个service account类型的账户
+
+![1567504036884](assets/1567504036884.png)
+
+```
+创建的了service account 的账户 dashboard-admin
+```
+
+##### 进行绑定（管理整个集群，使用clusterRoleBinding ）
+
+![1567504191476](assets/1567504191476.png)
+
+##### 查看 service account的认账token
+
+![1567504311000](assets/1567504311000.png)
+
+##### 使用token进行登录
+
+![1567504432701](assets/1567504432701.png)
+
+![1567504478595](assets/1567504478595.png)
+
+#### 使用kubeconfig 进行验证登录
+
+##### ~~签署一个专门用于dashboard 的证书（无用）~~
+
+![1567503452112](assets/1567503452112.png)
+
+##### ~~创建secret（无用）~~
+
+![1567503601288](assets/1567503601288.png)
+
+##### 创建service account
+
+![1567504602744](assets/1567504602744.png)
+
+##### 使用roleBinding 进行 service account的绑定
+
+![1567504832787](assets/1567504832787.png)
+
+![1567504874824](assets/1567504874824.png)
+
+```
+可以查看这个secret的token 信息进行登录，使用kube get describe secret SECRET_NAME 查看
+```
+
+##### 创建def-ns-admin 的service account的配置文件
+
+![1567505199869](assets/1567505199869.png)
+
+```
+设置集群的信息
+```
+
+##### 对token进行解码
+
+![1567505638700](assets/1567505638700.png)
+
+##### 设置 credentials 
+
+![1567505776254](assets/1567505776254.png)
+
+##### 设置 context 
+
+![1567505851595](assets/1567505851595.png)
+
+##### 生成的kubeconfig 文件
+
+![1567505978594](assets/1567505978594.png)
+
+```
+一定要user-context 一下
+```
+
+##### 进行登录
+
+![1567506046902](assets/1567506046902.png)
+
+#### 总结
+
+![1567506537657](assets/1567506537657.png)
+
+#### kubernetes 集群的管理方式
+
+![1567506709442](assets/1567506709442.png)
+
+### kubernetes的网络插件flannel
+
+#### docker的四种网络模型
+
+- bridge （桥接网络）自有网络名称空间
+- joined （联盟式网络）与另外的一个容器共享网络名称空间
+- open （开放式网络）容器直接使用宿主机的网络名称空间
+- none  不使用任何的网络名称空间
+
+```
+以上无论哪种方式，如果跨节点进行容器之间的通信时，需要使用NAT机制进行实现。
+任何的一个pod 在访问出主机之前，因为自己使用的是私有的网络地址，离开本机的时候，必须要做源地址(SNAT)的转换，确保拿到物理机的网络地址出去；每一个pod想要被别的容器访问到，就需要在pod所在的主机进行 目标地址的转换（DNAT），将自己的私有地址暴露出去。
+```
+
+![1568084620463](assets/1568084620463.png)
+
+![1568085061813](assets/1568085061813.png)
+
+#### kubernetes 的网络通信模型
+
+1. 容器间通信：同一个pod内的多个容器间的通信，lo
+
+2. pod 通信：pod ip <--> pod ip 之间直接进行通信，即pod双方所见的地址就是pod 的通信的地址
+
+3. pod 与service通信：pod ip <--> cluster ip （通过 ipvs 进行）
+
+   ![1568085538299](assets/1568085538299.png)
+
+   ```
+   通过设置 kube-proxy 的configmap 中的mode 的配置，给为 ipvs，可以开启ipvs的负载。
+   ipvs 只能替代 iptables 做负载均衡，NAT转换无法做。
+   ```
+
+   ![1568085603758](assets/1568085603758.png)
+
+4. service 与集群外部客户端通信
+
+```
+kubernetes 的网络实现需要 CNI 网络接口插件实现。
+实现方式：
+	flannel
+	calico
+	canel
+	kube-router
+	...	
+这些插件的解决方案无非这几种：
+	1. 虚拟网桥: bridge，虚拟网卡连接到网桥上。
+	2. 多路复用: MacVLAN, 基于mac 的方式创建VLAN，为每一个虚拟机配置独立的Mac地址，使一个屋里网卡承载多个容器去使用。直接使用物理网卡，并基于物理网卡的MacVLAN 机制进行跨节点通信。
+	3. 硬件交换: SR-IOV ( Single Root I/O Virtualization) 支持SR-IOV的物理网卡虚拟出来的实例，以一个独立网卡的形式呈现，每个VF有独立的PCI配置区域，并可以与其它VF共享同一个物理资源（共用同一个物理网口）
+```
+
+#### 网络查看的安装方式
+
+![1568108611855](assets/1568108611855.png)
+
+```
+直接将插件的配置文件放到 /etc/cni/net.d/ 的目录下即可进行加载插件
+```
 
