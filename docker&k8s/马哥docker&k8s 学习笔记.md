@@ -1,4 +1,4 @@
-## 马哥docker 学习笔记
+马哥docker 学习笔记
 
 ### 容器的概念
 
@@ -3234,4 +3234,267 @@ Ingress的清单文件：允许来自 10.244.0.0/16 排除 10.244.1.2/32 这个I
 ```
 
 ### kubernetes的调度策器、预选策略及优选函数
+
+#### pod的创建过程
+
+![1568795465473](assets/1568795465473.png)
+
+```
+1. 用户使用kubectl 工具调用api server 想要创建一个pod 的时候，api server检查权限认证都没有问题的话，将这个请求交由scheduler；
+2. 由scheduler 从众多的结点中选择出可以运行的结点（scheduler 是一个守护进程，内部有很多的调度算法，默认为defaultScheduler算法，由此算法选取出最适合的节点运行此pod）
+3. scheduler 将选择的结果返回给api server，api server 将选择的结果记录到etcd中，因为这个选择的结果在一定的时间内为一个持久的状态，如果节点不发生故障或pod不因资源的紧缺而OOM驱逐，这个pod资源将一直在这个节点
+4. 选中的结点的kubelet watch 到 api server 中当前结点的事件的相关资源变动后，kubelet知道分配给自己有新的pod运行，kubelet获取api server 的pod 的配置清单，根据配置清单中的配置，获取镜像，配置存储等
+```
+
+#### scheduler 的决策的过程
+
+```
+scheduler 从一批节点中找出符合pod运行的最佳的节点，scheduler如何评判谁为最佳？
+
+defaultScheduler算法在默认使用调度决策的时候，默认使用三个步骤来进行决策：
+	1. 预选节点（Predicate），排除完全不符合此pod运行的节点。
+		pod中运行的容器可以定义两个维度的资源限制，1）资源需求（下限），节点必须满足pod的最低的资源需求，才能运行pod，2）资源限额（上限），最多使用多少的资源限制。
+		再比如：pod共享了宿主机的网络名称空间，需要使用宿主机的80端口，那么就需要排除80端口已经被占用节点
+	2. 优选策略（priority），根据预选的节点，根据优选算法策略，计算各个节点的得分，按逆序排序后遴选出得分最高的最优的节点
+	3. 选定（Select），根据优选的结果把需要创建的pod绑定到所选择的结点上。如果有多个节点的得分一样，那么就随机选择一个。
+```
+
+```
+1. 节点亲和性调度（node affinity）,使用nodeSelector 进行调度
+2. pod亲和性调度（pod affinity），希望某些和多个pod运行在同一个或相邻的节点上，使通信带宽更大，延时更小。pod unaffinity pod的反亲和性调度，pod与那些pod不相容
+3. 污点（taints）和污点容忍度（tolerations）调度，给一些节点打上一些污点，一个pod能否在其上运行取决于pod是否能容忍这些污点，tolerations 定义在pod上的，taints定义在节点上的。
+```
+
+#### scheduler的预选算法
+
+![1568877669076](assets/1568877669076.png)
+
+```
+const (
+	// MatchInterPodAffinityPred defines the name of predicate MatchInterPodAffinity.
+	MatchInterPodAffinityPred = "MatchInterPodAffinity"
+	// CheckVolumeBindingPred defines the name of predicate CheckVolumeBinding.
+	CheckVolumeBindingPred = "CheckVolumeBinding"
+	// CheckNodeConditionPred defines the name of predicate CheckNodeCondition.
+	CheckNodeConditionPred = "CheckNodeCondition"
+	// GeneralPred defines the name of predicate GeneralPredicates.
+	GeneralPred = "GeneralPredicates"
+	// HostNamePred defines the name of predicate HostName.
+	HostNamePred = "HostName"
+	// PodFitsHostPortsPred defines the name of predicate PodFitsHostPorts.
+	PodFitsHostPortsPred = "PodFitsHostPorts"
+	// MatchNodeSelectorPred defines the name of predicate MatchNodeSelector.
+	MatchNodeSelectorPred = "MatchNodeSelector"
+	// PodFitsResourcesPred defines the name of predicate PodFitsResources.
+	PodFitsResourcesPred = "PodFitsResources"
+	// NoDiskConflictPred defines the name of predicate NoDiskConflict.
+	NoDiskConflictPred = "NoDiskConflict"
+	// PodToleratesNodeTaintsPred defines the name of predicate PodToleratesNodeTaints.
+	PodToleratesNodeTaintsPred = "PodToleratesNodeTaints"
+	// CheckNodeUnschedulablePred defines the name of predicate CheckNodeUnschedulablePredicate.
+	CheckNodeUnschedulablePred = "CheckNodeUnschedulable"
+	// PodToleratesNodeNoExecuteTaintsPred defines the name of predicate PodToleratesNodeNoExecuteTaints.
+	PodToleratesNodeNoExecuteTaintsPred = "PodToleratesNodeNoExecuteTaints"
+	// CheckNodeLabelPresencePred defines the name of predicate CheckNodeLabelPresence.
+	CheckNodeLabelPresencePred = "CheckNodeLabelPresence"
+	// CheckServiceAffinityPred defines the name of predicate checkServiceAffinity.
+	CheckServiceAffinityPred = "CheckServiceAffinity"
+	// MaxEBSVolumeCountPred defines the name of predicate MaxEBSVolumeCount.
+	// DEPRECATED
+	// All cloudprovider specific predicates are deprecated in favour of MaxCSIVolumeCountPred.
+	MaxEBSVolumeCountPred = "MaxEBSVolumeCount"
+	// MaxGCEPDVolumeCountPred defines the name of predicate MaxGCEPDVolumeCount.
+	// DEPRECATED
+	// All cloudprovider specific predicates are deprecated in favour of MaxCSIVolumeCountPred.
+	MaxGCEPDVolumeCountPred = "MaxGCEPDVolumeCount"
+	// MaxAzureDiskVolumeCountPred defines the name of predicate MaxAzureDiskVolumeCount.
+	// DEPRECATED
+	// All cloudprovider specific predicates are deprecated in favour of MaxCSIVolumeCountPred.
+	MaxAzureDiskVolumeCountPred = "MaxAzureDiskVolumeCount"
+	// MaxCinderVolumeCountPred defines the name of predicate MaxCinderDiskVolumeCount.
+	// DEPRECATED
+	// All cloudprovider specific predicates are deprecated in favour of MaxCSIVolumeCountPred.
+	MaxCinderVolumeCountPred = "MaxCinderVolumeCount"
+	// MaxCSIVolumeCountPred defines the predicate that decides how many CSI volumes should be attached
+	MaxCSIVolumeCountPred = "MaxCSIVolumeCountPred"
+	// NoVolumeZoneConflictPred defines the name of predicate NoVolumeZoneConflict.
+	NoVolumeZoneConflictPred = "NoVolumeZoneConflict"
+	// CheckNodeMemoryPressurePred defines the name of predicate CheckNodeMemoryPressure.
+	CheckNodeMemoryPressurePred = "CheckNodeMemoryPressure"
+	// CheckNodeDiskPressurePred defines the name of predicate CheckNodeDiskPressure.
+	CheckNodeDiskPressurePred = "CheckNodeDiskPressure"
+	// CheckNodePIDPressurePred defines the name of predicate CheckNodePIDPressure.
+	CheckNodePIDPressurePred = "CheckNodePIDPressure"
+	// EvenPodsSpreadPred defines the name of predicate EvenPodsSpread
+	EvenPodsSpreadPred = "EvenPodsSpread"
+
+	// DefaultMaxGCEPDVolumes defines the maximum number of PD Volumes for GCE
+	// GCE instances can have up to 16 PD volumes attached.
+	DefaultMaxGCEPDVolumes = 16
+	// DefaultMaxAzureDiskVolumes defines the maximum number of PD Volumes for Azure
+	// Larger Azure VMs can actually have much more disks attached.
+	// TODO We should determine the max based on VM size
+	DefaultMaxAzureDiskVolumes = 16
+
+	// KubeMaxPDVols defines the maximum number of PD Volumes per kubelet
+	KubeMaxPDVols = "KUBE_MAX_PD_VOLS"
+
+	// EBSVolumeFilterType defines the filter name for EBSVolumeFilter.
+	EBSVolumeFilterType = "EBS"
+	// GCEPDVolumeFilterType defines the filter name for GCEPDVolumeFilter.
+	GCEPDVolumeFilterType = "GCE"
+	// AzureDiskVolumeFilterType defines the filter name for AzureDiskVolumeFilter.
+	AzureDiskVolumeFilterType = "AzureDisk"
+	// CinderVolumeFilterType defines the filter name for CinderVolumeFilter.
+	CinderVolumeFilterType = "Cinder"
+)
+```
+
+```
+预选策略：
+	CheckNodeCondition：检查节点本身是否正常，网络，磁盘，主机是否故障等
+	GeneralPredicates：General 包含了多个的预选策略
+		HostName：如果定义了HostName属性，则检查pod的hostname（pods.spec.hostname）在所调度的结点上pod的名字是否使用。因为有些pod的名字是固定的，不是随机生成的。
+		PodFitsHostPorts：pod是否适应节点的port，如果pod中的container定义了hostPort属性(pods.spec.container.ports.hostPort),要绑定到节点的port上, 如果节点的port被占用了，则不能调度到相应的节点。
+		MatchNodeSelector：pod中定义了的nodeSelector属性（pods.spec.nodeSelector），就查看节点的标签是否适配这个pod的nodeSelector上。
+		PodFitsResources：检查节点是否有足够的资源支持pod的运行，可以使用 kubectl describe nodes node01.magedu.com 进行资源的查看
+	NoDiskConflict： 检查pod所申请的存储卷在节点是否可以使用
+	PodToleratesNodeTaints：检查pod中定义的tolerations属性是否能容忍节点的taints（taints是否是tolerations的子集）
+	PodToleratesNodeNoExecuteTaints：当节点中添加了pod不能容忍的污点，之前在上面运行的pod默认是不会进行驱离，如果配置了此项（pod则会不能容忍新添加的污点），则会进行驱逐。
+	CheckNodeLabelPresence：检查node的label的存在性
+	CheckServiceAffinity: 同一个service含有多个的pod，在创建pod的时候，如果这个pod属于已创建的service，则pod的创建尽可能在有同一个service 的pod的节点上创建。
+	
+	CheckVolumeBinding：检查已绑定和未绑定的pvc是否能满足pod的存储卷需求
+	NoVolumeZoneConflict：在存储卷区域限制的前提下，每一个节点过来了，它的存储卷是否与pod的需求有冲突
+	CheckNodeMemoryPressure：检查节点的内存是否处于压力较大的状态
+	CheckNodePIDPressure: 检查PID压力
+	CheckNodeDiskPressure：检查disk IO是否压力过大
+	MatchInterPodAffinity: pod 与pod之间的亲和性检查
+```
+
+```
+预选策略使用一票否决的方式，只要一个不满足，就淘汰。
+```
+
+#### scheduler的优选算法
+
+**leastRequested**
+
+```
+// The unused capacity is calculated on a scale of 0-10
+// 0 being the lowest priority and 10 being the highest.
+// The more unused resources the higher the score is.
+func leastRequestedScore(requested, capacity int64) int64 {
+	if capacity == 0 {
+		return 0
+	}
+	if requested > capacity {
+		return 0
+	}
+
+	return ((capacity - requested) * int64(schedulerapi.MaxPriority)) / capacity
+}
+```
+
+**BalancedResourceAllocation**
+
+```
+CPU 和内存的使用相近的胜出
+```
+
+**NodePreferAvoidPods**
+
+```
+// CalculateNodePreferAvoidPodsPriorityMap priorities nodes according to the node annotation
+// "scheduler.alpha.kubernetes.io/preferAvoidPods".
+func CalculateNodePreferAvoidPodsPriorityMap(pod *v1.Pod, meta interface{}, nodeInfo *schedulernodeinfo.NodeInfo) (schedulerapi.HostPriority, error) {
+	node := nodeInfo.Node()
+	if node == nil {
+		return schedulerapi.HostPriority{}, fmt.Errorf("node not found")
+	}
+	var controllerRef *metav1.OwnerReference
+	if priorityMeta, ok := meta.(*priorityMetadata); ok {
+		controllerRef = priorityMeta.controllerRef
+	} else {
+		// We couldn't parse metadata - fallback to the podspec.
+		controllerRef = metav1.GetControllerOf(pod)
+	}
+
+	if controllerRef != nil {
+		// Ignore pods that are owned by other controller than ReplicationController
+		// or ReplicaSet.
+		if controllerRef.Kind != "ReplicationController" && controllerRef.Kind != "ReplicaSet" {
+			controllerRef = nil
+		}
+	}
+	if controllerRef == nil {
+		// controllerRef为 nil (ReplicationController 和 ReplicaSet 控制器除外的其他控制器都置为了nil)的类型则返回 schedulerapi.MaxPriority(10得分)
+		return schedulerapi.HostPriority{Host: node.Name, Score: schedulerapi.MaxPriority}, nil
+	}
+
+	avoids, err := v1helper.GetAvoidPodsFromNodeAnnotations(node.Annotations)
+	if err != nil {
+		// If we cannot get annotation, assume it's schedulable there.
+		// 没有获得 “scheduler.alpha.kubernets.io/preferAvoidPods” 的注解，返回schedulerapi.MaxPriority(10得分)
+		return schedulerapi.HostPriority{Host: node.Name, Score: schedulerapi.MaxPriority}, nil
+	}
+	for i := range avoids.PreferAvoidPods {
+		avoid := &avoids.PreferAvoidPods[i]
+		if avoid.PodSignature.PodController.Kind == controllerRef.Kind && avoid.PodSignature.PodController.UID == controllerRef.UID {
+			// ReplicationController 和 ReplicaSet 控制器 的得分为0，则不会被调度到有注解的节点
+			return schedulerapi.HostPriority{Host: node.Name, Score: 0}, nil
+		}
+	}
+	return schedulerapi.HostPriority{Host: node.Name, Score: schedulerapi.MaxPriority}, nil
+}
+```
+
+```
+如果节点不存在注解信息 “scheduler.alpha.kubernets.io/preferAvoidPods” 得分为10，权重为10000，说明适合运行pod的。
+存在注解，但是ReplicationController 和 ReplicaSet 控制器管控的pod对象 的得分为0，则不会被调度到有注解的节点。
+```
+
+**TaintToleration**
+
+```
+将pod的spec.tolerations列表项与节点的taints列表项进行匹配度检查，匹配条目越多，得分越低。
+```
+
+**SelectorSpreading**
+
+```
+例如，同一标签选择器的pod在5个节点中的其中三个，另外的两个pod没有相应标签的pod，再新创建pod的时候，则剩余的两个没有运行此类标签的pod的得分较高，目的是尽可能使pod扩散到最多的结点上去。
+```
+
+**InterPodAffinity**
+
+```
+遍历pod对象的亲和性条目，并将能够匹配对给定结点的条目相加，值越大的得分越高。
+```
+
+**MostRequested**
+
+```
+资源使用越多的胜出，尽可能的把一个结点的资源使用完。
+```
+
+**NodeLabel**
+
+```
+看节点是否存在某些标签，只关注是否存在标签，而不关注标签的值。
+```
+
+**ImageLocality**
+
+```
+得分取决于这个节点是否拥有pod运行的镜像，是根据所需的镜像的体积大小来计算，比如pod的运行需要三个镜像，第一个节点有一个镜像，大小100M, 而第二个节点有其余两个镜像20M, 则第一个结点的得分高。
+```
+
+**NodeAffinity**
+
+```
+越亲和得分越高，根据pod中的nodeSelector 进行检查，能匹配的越多，得分越高
+```
+
+### kubernetes的高级调度方式
 
