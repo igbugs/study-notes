@@ -185,6 +185,12 @@ kubernetes 通过 CNI（容器网络接口）来接入第三方的网络插件�
 
 ![1564642412326](assets/1564642412326.png)
 
+### kubernetes 架构图
+
+![1569294191065](assets/1569294191065.png)
+
+![1569294249132](assets/1569294249132.png)
+
 ### kubeadm 初始化kubernetes集群
 
 ![1564642656218](assets/1564642656218.png)
@@ -3497,4 +3503,167 @@ func CalculateNodePreferAvoidPodsPriorityMap(pod *v1.Pod, meta interface{}, node
 ```
 
 ### kubernetes的高级调度方式
+
+#### nodeSelector 决定pod创建
+
+![1569220337208](assets/1569220337208.png)
+
+```
+nodeSelector 选择含有disktype: ssd 的标签的节点
+```
+
+![1569220482464](assets/1569220482464.png)
+
+```
+可以看到pod-demo 调度到了node01 上去了
+```
+
+**更改disktype **
+
+![1569220842269](assets/1569220842269.png)
+
+```
+更改类型为harddisk，集群node没有一个包含有 harddisk 
+```
+
+![1569220963252](assets/1569220963252.png)
+
+```
+此时pod apply之后，会一直处于pending 状态
+
+nodeSelector 是一个强约束，如果nodeSelector 没有相应的符合节点，预选节点就不能通过。
+```
+
+![1569221486579](assets/1569221486579.png)
+
+![1569221504130](assets/1569221504130.png)
+
+```
+查看describe 的pod描述，没有可用的pod match
+```
+
+![1569221597302](assets/1569221597302.png)
+
+```
+给node02 打上 harddisk 的标签
+```
+
+#### affinity 决定创建pod
+
+![1569221925763](assets/1569221925763.png)
+
+```
+节点亲和性，pod亲和性和pod反亲和性
+```
+
+##### node亲和性
+
+![1569222096833](assets/1569222096833.png)
+
+```
+preferred: 尽量的满足节点的条件，节点即使不完全匹配，也可以容忍（软亲和性）
+required: 必须要完全的满足条件，不然不进行调度（硬亲和性）
+```
+
+**使用required 进行node亲和性调度**
+
+![1569223824681](assets/1569223824681.png)
+
+```
+选择key为 zone，values 为 foo或bar 的节点
+```
+
+![1569224116784](assets/1569224116784.png)
+
+```
+此时没有一个节点拥有 foo或bar，所以pod 的创建在pending的状态
+```
+
+**使用preferred 进行node亲和性调度**
+
+![1569225070975](assets/1569225070975.png)
+
+![1569225100367](assets/1569225100367.png)
+
+```
+此时虽然没有一个节点拥有foo 或bar，但是pod运行成功
+```
+
+##### pod亲和性
+
+![1569226425479](assets/1569226425479.png)
+
+![1569226449040](assets/1569226449040.png)
+
+```
+topologykey: 位置拓扑键，使用node标识的哪个键去判定 机器节点是否在同一位置
+lableSelector: 选择和哪个pod进行亲和
+namespaces: 是指的是labelSelector 选择的pod 的所属的名称空间是哪个名称空间，如果没有指定，则默认为当前的锁创建的pod所在的名称空间
+```
+
+![1569227231553](assets/1569227231553.png)
+
+**配置pod亲和性清单**
+
+![1569293717269](assets/1569293717269.png)
+
+```
+第一个pod打了标签 app=myapp
+第二个pod在定义的时候，亲和性将亲和app=myapp 的pod，必须（requiredDuringSchedulingIgnoredDuringExecution）和这类标签的pod在一起，而选择（topology）的标准是根据 node节点的 kubernetes.io/hostname 的这个lable
+```
+
+![1569294629379](assets/1569294629379.png)
+
+```
+节点的默认的标签
+```
+
+![1569294535482](assets/1569294535482.png)
+
+![1569294559426](assets/1569294559426.png)
+
+```
+两个pod被调度到了同一个的节点上
+```
+
+**配置pod的反亲和性清单**
+
+![1569295238433](assets/1569295238433.png)
+
+```
+只是把podAffinity 更改为podAntiAffinity 则这两个pod就反亲和，则根据topology 分散到不同的节点上。
+```
+
+![1569295364760](assets/1569295364760.png)
+
+**更改topologyKey 为不同的key**
+
+![1569295634061](assets/1569295634061.png)
+
+```
+给集群中的两个节点 打上新的标签 zone=foo  则这两个节点为同一区域，亲和性的pod会优先在这两个节点创建，而反亲和性，则只能有一个pod在zone=foo标签的节点上创建，另一个要在zone不为foo的结点创建（zone没有值也不能创建）
+```
+
+![1569295845433](assets/1569295845433.png)
+
+![1569295863118](assets/1569295863118.png)
+
+```
+第一个pod运行库，第二个pod pending
+```
+
+```
+pod的亲和性，是pod选择节点进行调度；而污点选择，是node打上相应的污点，节点选择那些的pod可以运行在我上面。
+taints: 定义在node节点上，定义污点
+tolerations: 定义在pod上，定义污点容忍度
+```
+
+##### 污点与容忍度调度
+
+```
+taints 的effect定义对Pod的排斥效果：
+	NoSchedule: 仅影响新生成的pod 的调度的过程（不容忍一定不调度），对现存的pod对象不产生影响；
+	NoExecut: 即影响调度的过程，也影响现在的Pod对象，不容忍的pod对象被驱逐；
+	PreferNoSchedule: 仅影响新生成的pod 的调度的过程（不容忍一定不调度，但是实在没有别的地方运行，也可以调度）
+```
 
