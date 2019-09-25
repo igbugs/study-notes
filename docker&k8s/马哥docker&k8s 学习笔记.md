@@ -3667,3 +3667,177 @@ taints 的effect定义对Pod的排斥效果：
 	PreferNoSchedule: 仅影响新生成的pod 的调度的过程（不容忍一定不调度，但是实在没有别的地方运行，也可以调度）
 ```
 
+![1569394367790](assets/1569394367790.png)
+
+```
+master 节点的污点
+```
+
+**打污点的方式**
+
+![1569395191151](assets/1569395191151.png)
+
+![1569395264707](assets/1569395264707.png)
+
+```
+对node01 打上了污点 node-type:production:NoSchedule
+```
+
+![1569396733100](assets/1569396733100.png)
+
+```
+deploy 创建 pod
+```
+
+![1569396768092](assets/1569396768092.png)
+
+```
+创建pod发现都被调度到了 node02 上了，因为在定义的过程中，没有定义容忍(tolerations) node01上 node-type:production:NoSchedule的污点
+```
+
+![1569397052237](assets/1569397052237.png)
+
+```
+在node02 上定义污点 node-type=dev:NoExecute 
+在其上面运行的pod 如果不能容忍 污点 dev，则pod会被驱逐，变为 Pending，两个worker 节点存在污点是pod不能容忍的，所有不能进行创建
+```
+
+**为pod定义容忍度**
+
+![1569397551309](assets/1569397551309.png)
+
+![1569397742207](assets/1569397742207.png)
+
+```
+配置的pod的容忍度为 node-type=production:NoExecute ;而node01 定义的为 node-type=production:NoSchedule 并没有完全的匹配
+```
+
+![1569397876151](assets/1569397876151.png)
+
+```
+更改 effect 为 NoSchedule，完全匹配node01 的污点 node-type=production:NoSchedule
+```
+
+![1569397932373](assets/1569397932373.png)
+
+```
+此时deploy 在node01 上创建成功
+```
+
+![1569398075579](assets/1569398075579.png)
+
+```
+operator 定义为 Exists，只要有对应的 键值存在，并且effect 也匹配，则进行调度
+```
+
+![1569398265477](assets/1569398265477.png)
+
+```
+这样改 则会在 node02 上进行pod的创建
+```
+
+![1569398358978](assets/1569398358978.png)
+
+![1569398407675](assets/1569398407675.png)
+
+### kubernetes 容器资源需求、资源限制及HeapSter
+
+####  **定义pod的资源需求**
+
+![1569399232939](assets/1569399232939.png)
+
+```
+requests: 定义需要使用的cpu， 200m 表示0.2 个CPU
+limits: 限制最多使用的资源限制
+```
+
+#### pod 的QoS Class(服务质量类别)
+
+```
+容器限制了资源之后，默认的分配了 QoS Class
+	1. Guranteed: 确保的
+		pod 里的每一个容器设置了CPU和内存的requests和limits, 并且 cpu.requests=cpu.limits ,memory.requests=memory.limits
+		此时被归类为 Guranteed, 此类的pod的优先级最高，当pod的资源不够的时候，这类pod有限保证运行
+	2. Burstable: 不稳定的
+		pod中至少一个容器设置了CPU或memory的requests 属性，中等优先级
+	3. BestEffort: 
+		pod中没有任何一个容器设置了requests或limits属性，最低优先级别
+
+当node的节点资源不够用的时候，会有限 终止 BestEffort 类别的pod，保证其他类别的pod运行。
+
+如果资源紧张了，而只剩下 Burstable 类别的pod，如何 终止pod释放资源呢？
+	pod 实际使用的资源与pod 中定义的资源使用限制（无论是requests 或 limits）的比，占用比值较大的首先被终止。
+	例如：定义 一个pod requests 定义 memory: 512Mi 实际使用 500Mi
+		另一个pod requests 定义 memory: 1024Mi 实际使用 700Mi
+	则，第一个pod 首先被终止
+```
+
+![1569405171602](assets/1569405171602.png)
+
+#### kubectl top 查看pod资源
+
+```
+使用 kubectl top 命令查看pod资源，需要 Heapster 收集各个pod的数据，而默认kubernetes 集群没有安装
+```
+
+![1569406190267](assets/1569406190267.png)
+
+```
+各个节点的kubelet 内嵌了插件（cAdvisor），较早版本的k8s CAdvisor是独立的组件，后来整合进kubelet中。
+cAdvisor 将收集到的pod的数据和节点的数据，由Heapster 进行汇总，使用kubectl top 查看的时候，可以查看 到 cAdvisor 中的缓存的数据。
+也可以将数据写入到 influxdb中，由grafana同一展示
+```
+
+##### 安装influxdb
+
+```
+https://github.com/kubernetes-retired/heapster/blob/master/deploy/kube-config/influxdb/influxdb.yaml
+
+## 已经退役 heapster
+
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: monitoring-influxdb
+  namespace: kube-system
+# selector:	## 需要添加的，如果 apiversion: apps/v1
+#   matchlables:
+#    task: monitoring
+#    k8s-app: influxdb
+spec:
+  replicas: 1
+  template:
+    metadata:
+      labels:
+        task: monitoring
+        k8s-app: influxdb
+    spec:
+      containers:
+      - name: influxdb
+        image: k8s.gcr.io/heapster-influxdb-amd64:v1.5.2
+        volumeMounts:
+        - mountPath: /data
+          name: influxdb-storage
+      volumes:
+      - name: influxdb-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    task: monitoring
+    # For use as a Cluster add-on (https://github.com/kubernetes/kubernetes/tree/master/cluster/addons)
+    # If you are NOT using this as an addon, you should comment out this line.
+    kubernetes.io/cluster-service: 'true'
+    kubernetes.io/name: monitoring-influxdb
+  name: monitoring-influxdb
+  namespace: kube-system
+spec:
+  ports:
+  - port: 8086
+    targetPort: 8086
+  selector:
+    k8s-app: influxdb
+```
+
