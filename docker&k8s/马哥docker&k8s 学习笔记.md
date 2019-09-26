@@ -3795,15 +3795,16 @@ https://github.com/kubernetes-retired/heapster/blob/master/deploy/kube-config/in
 
 ## 已经退役 heapster
 
-apiVersion: extensions/v1beta1
+# apiVersion: extensions/v1beta1
+apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: monitoring-influxdb
   namespace: kube-system
-# selector:	## 需要添加的，如果 apiversion: apps/v1
-#   matchlables:
-#    task: monitoring
-#    k8s-app: influxdb
+selector:	## 需要添加的，如果 apiversion: apps/v1
+  matchlables:
+   task: monitoring
+   k8s-app: influxdb
 spec:
   replicas: 1
   template:
@@ -3840,4 +3841,348 @@ spec:
   selector:
     k8s-app: influxdb
 ```
+
+![1569480950972](assets/1569480950972.png)
+
+##### 配置RBAC
+
+```
+## rbac 配置
+
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1beta1
+metadata:
+  name: heapster
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:heapster
+subjects:
+- kind: ServiceAccount
+  name: heapster
+  namespace: kube-system
+```
+
+![1569481045329](assets/1569481045329.png)
+
+##### 安装heapster
+
+```
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: heapster
+  namespace: kube-system
+---
+# apiVersion: extensions/v1beta1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: heapster
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:	## 需要添加的，如果 apiversion: apps/v1
+    matchlables:
+     task: monitoring
+     k8s-app: influxdb
+  template:
+    metadata:
+      labels:
+        task: monitoring
+        k8s-app: heapster
+    spec:
+      serviceAccountName: heapster
+      containers:
+      - name: heapster
+        image: k8s.gcr.io/heapster-amd64:v1.5.4
+        imagePullPolicy: IfNotPresent
+        command:
+        - /heapster
+        - --source=kubernetes:https://kubernetes.default
+        - --sink=influxdb:http://monitoring-influxdb.kube-system.svc:8086
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    task: monitoring
+    # For use as a Cluster add-on (https://github.com/kubernetes/kubernetes/tree/master/cluster/addons)
+    # If you are NOT using this as an addon, you should comment out this line.
+    kubernetes.io/cluster-service: 'true'
+    kubernetes.io/name: Heapster
+  name: heapster
+  namespace: kube-system
+spec:
+  ports:
+  - port: 80
+    targetPort: 8082
+  type: NodePort		## 添加此项在集群外部访问
+  selector:
+    k8s-app: heapster
+```
+
+![1569481655848](assets/1569481655848.png)
+
+##### 安装grafana
+
+```
+# apiVersion: extensions/v1beta1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring-grafana
+  namespace: kube-system
+spec:
+  replicas: 1
+  selector:	## 需要添加的，如果 apiversion: apps/v1
+    matchlables:
+     task: monitoring
+     k8s-app: influxdb
+  template:
+    metadata:
+      labels:
+        task: monitoring
+        k8s-app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: k8s.gcr.io/heapster-grafana-amd64:v5.0.4
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /etc/ssl/certs
+          name: ca-certificates
+          readOnly: true
+        - mountPath: /var
+          name: grafana-storage
+        env:
+        - name: INFLUXDB_HOST
+          value: monitoring-influxdb
+        - name: GF_SERVER_HTTP_PORT
+          value: "3000"
+          # The following env variables are required to make Grafana accessible via
+          # the kubernetes api-server proxy. On production clusters, we recommend
+          # removing these env variables, setup auth for grafana, and expose the grafana
+          # service using a LoadBalancer or a public IP.
+        - name: GF_AUTH_BASIC_ENABLED
+          value: "false"
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: "true"
+        - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+          value: Admin
+        - name: GF_SERVER_ROOT_URL
+          # If you're only using the API Server proxy, set this value instead:
+          # value: /api/v1/namespaces/kube-system/services/monitoring-grafana/proxy
+          value: /
+      volumes:
+      - name: ca-certificates
+        hostPath:
+          path: /etc/ssl/certs
+      - name: grafana-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    # For use as a Cluster add-on (https://github.com/kubernetes/kubernetes/tree/master/cluster/addons)
+    # If you are NOT using this as an addon, you should comment out this line.
+    kubernetes.io/cluster-service: 'true'
+    kubernetes.io/name: monitoring-grafana
+  name: monitoring-grafana
+  namespace: kube-system
+spec:
+  # In a production setup, we recommend accessing Grafana through an external Loadbalancer
+  # or through a public IP.
+  # type: LoadBalancer
+  # You could also use NodePort to expose the service at a randomly-generated port
+  # type: NodePort
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: NodePort		## 映射到主机节点
+  selector:
+    k8s-app: grafana
+```
+
+![1569484180853](assets/1569484180853.png)
+
+![1569484342578](assets/1569484342578.png)
+
+```
+默认的influxdb 数据源
+```
+
+##### 注意
+
+```
+kubernetes 1.11 开始逐步的弃用 Heapster 而迁移到metric-server ，1.12 后将彻底弃用
+```
+
+### 资源指标API及自定义指标API
+
+```
+资源指标：metric-server
+自定义指标: promethus, k8s-promethues-adapter
+
+新一代的架构：
+	核心指标流水线：
+		由kubelet、metric-server以及API Server提供的api组成
+		收集CPU累计使用率、内存实时使用率、Pod的资源使用率及容器的资源使用率
+	监控流水线：
+		用于从系统收集各种的指标数据并提供终端用户使用以及HPA使用它包含核心指标及许多的非核心指标。
+		非核心指标本身不能被k8s 所解析（例如 kubelet top 查看不了）
+```
+
+**kubernetes 默认的api分组（没有metrics 相关的api）**
+
+![1569507963622](assets/1569507963622.png)
+
+![1569508052240](assets/1569508052240.png)
+
+```
+metrics-server 的api 组是 /apis/metrics.k8s.io/v1beta1
+
+kube-aggregator 的作用是 将 metrics-server 的/apis/metrics.k8s.io/v1beta1 API 组与原生的API分组聚合起来，一同展示给用户使用
+```
+
+##### metric-server安装
+
+**metrics-apiservice.yaml 配置清单**
+
+```
+---
+apiVersion: apiregistration.k8s.io/v1beta1
+kind: APIService		## 类型为APIService
+metadata:
+  name: v1beta1.metrics.k8s.io
+spec:
+  service:
+    name: metrics-server
+    namespace: kube-system
+  group: metrics.k8s.io		## API组名
+  version: v1beta1
+  insecureSkipTLSVerify: true
+  groupPriorityMinimum: 100
+  versionPriority: 100
+```
+
+**metrics-server-deployment.yaml 配置清单**
+
+```
+---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: metrics-server		## 定义了ServiceAccount
+  namespace: kube-system
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: metrics-server
+  namespace: kube-system
+  labels:
+    k8s-app: metrics-server
+spec:
+  selector:
+    matchLabels:
+      k8s-app: metrics-server
+  template:
+    metadata:
+      name: metrics-server
+      labels:
+        k8s-app: metrics-server
+    spec:
+      serviceAccountName: metrics-server
+      volumes:
+      # mount in tmp so we can safely use from-scratch images and/or read-only containers
+      - name: tmp-dir
+        emptyDir: {}
+      containers:
+      - name: metrics-server
+        image: k8s.gcr.io/metrics-server-amd64:v0.3.5
+        imagePullPolicy: Always
+        volumeMounts:
+        - name: tmp-dir
+          mountPath: /tmp
+```
+
+**rbac 资源控制**
+
+```
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: system:metrics-server
+rules:
+- apiGroups:
+  - ""
+  resources:
+  - pods
+  - nodes
+  - nodes/stats
+  - namespaces
+  verbs:
+  - get
+  - list
+  - watch
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: system:metrics-server
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: system:metrics-server
+subjects:
+- kind: ServiceAccount
+  name: metrics-server		## 绑定的 ServiceAccount 账户
+  namespace: kube-system
+```
+
+![1569510686491](assets/1569510686491.png)
+
+```
+部署所有的文件
+```
+
+![1569511145900](assets/1569511145900.png)
+
+```
+如果使用kubernetes-incubator/metrics-server 不能部署成功, 使用kubernetes 下面的addons 进行部署
+```
+
+![1569511313773](assets/1569511313773.png)
+
+**此时可以查看到metrics-server的api**
+
+![1569511483610](assets/1569511483610.png)
+
+```
+metrics-server的api   metrics.k8s.io/v1beta1 聚合进了API组
+```
+
+##### **使用反代 监听本地的端口，查看部署metrics数据**
+
+![1569511606634](assets/1569511606634.png)
+
+![1569511647796](assets/1569511647796.png)
+
+```
+可以访问到 metrics 的api
+可以查看的指标有 nodes 和pods
+```
+
+![1569511721771](assets/1569511721771.png)
+
+```
+node的数据
+```
+
+![1569511739168](assets/1569511739168.png)
 
