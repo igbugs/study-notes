@@ -3938,7 +3938,7 @@ spec:
   selector:	## 需要添加的，如果 apiversion: apps/v1
     matchlables:
      task: monitoring
-     k8s-app: influxdb
+     k8s-app: grafana
   template:
     metadata:
       labels:
@@ -4048,7 +4048,7 @@ metrics-server 的api 组是 /apis/metrics.k8s.io/v1beta1
 kube-aggregator 的作用是 将 metrics-server 的/apis/metrics.k8s.io/v1beta1 API 组与原生的API分组聚合起来，一同展示给用户使用
 ```
 
-##### metric-server安装
+#### metric-server安装
 
 **metrics-apiservice.yaml 配置清单**
 
@@ -4167,7 +4167,7 @@ subjects:
 metrics-server的api   metrics.k8s.io/v1beta1 聚合进了API组
 ```
 
-##### **使用反代 监听本地的端口，查看部署metrics数据**
+#### **使用反代 监听本地的端口，查看部署metrics数据**
 
 ![1569511606634](assets/1569511606634.png)
 
@@ -4185,4 +4185,785 @@ node的数据
 ```
 
 ![1569511739168](assets/1569511739168.png)
+
+```
+pod 的数据，还没有
+```
+
+![1569511889206](assets/1569511889206.png)
+
+```
+当一个pod中含有多个容器的时候，可以使用-c 指定容器的名称，去查看相应容器的日志
+```
+
+![1569512003932](assets/1569512003932.png)
+
+```
+可以看到收集到的node的数据
+```
+
+#### 使用kubectl top 查看集群数据
+
+![1569512155116](assets/1569512155116.png)
+
+![1569512173296](assets/1569512173296.png)
+
+#### 部署使用promethues 监控集群
+
+**promethues 架构**
+
+![1569739750482](assets/1569739750482.png)
+
+```
+Prometheus Server 通过部署在node节点上的 node_exporter（或pod内各种服务的exporter） 的代理服务暴露出来的 metrics url 获取监控数据，进行存储。
+PromQL 功能强大的查询语句，对promethues存储的时序数据进行查询。
+k8s-prometheus-adpater 与PromQL 之间有（k8s-state-metrics）通过使用PromQL 查询的数据转换为k8s api 可以解析的数据格式
+custom Metrics API 通过 kube-aggregator 方式添加自定义的api到 k8s 的api中
+```
+
+- prometheus目录：部署Promethues Metrics API Server所需要的各资源配置清单。
+- k8s-prometheus-adapter目录：部署基于prometheus的自定义指标API服务器所需要的各资源配置清单。
+- podinfo目录：测试使用的podinfo相关的deployment和service对象的资源配置清单。
+- node_exporter目录：于kubernetes集群各节点部署node_exporter。
+- kube-state-metrics：聚合kubernetes资源对象，提供指标数据。
+
+**部署promethues**
+
+```
+github: https://github.com/iKubernetes/k8s-prom
+```
+
+![1569745745077](assets/1569745745077.png)
+
+1. 创建名称空间 prom
+
+   ```
+   ---
+   apiVersion: v1
+   kind: Namespace
+   metadata:
+     name: prom
+   ```
+
+2. 部署node_exporter
+
+   ```
+   ## node-exporter-ds.yaml
+   ## DaemonSet 在集群中的每一个节点中部署一份
+   apiVersion: apps/v1
+   kind: DaemonSet
+   metadata:
+     name: prometheus-node-exporter
+     namespace: prom
+     labels:
+       app: prometheus
+       component: node-exporter
+   spec:
+     selector:
+       matchLabels:
+         app: prometheus
+         component: node-exporter
+     template:
+       metadata:
+         name: prometheus-node-exporter
+         labels:
+           app: prometheus
+           component: node-exporter
+       spec:
+         tolerations:
+         - effect: NoSchedule	## 能容忍主机污点
+           key: node-role.kubernetes.io/master
+         containers:
+         - image: prom/node-exporter:v0.15.2
+           name: prometheus-node-exporter
+           ports:
+           - name: prom-node-exp
+             containerPort: 9100
+             hostPort: 9100
+         hostNetwork: true
+         hostPID: true
+   ```
+
+   ```
+   ## node-exporter-svc.yaml
+   apiVersion: v1
+   kind: Service
+   metadata:
+     annotations:
+       prometheus.io/scrape: 'true'
+     name: prometheus-node-exporter
+     namespace: prom
+     labels:
+       app: prometheus
+       component: node-exporter
+   spec:
+     clusterIP: None
+     ports:
+       - name: prometheus-node-exporter
+         port: 9100
+         protocol: TCP
+     selector:
+       app: prometheus
+       component: node-exporter
+     type: ClusterIP
+   ```
+
+3. 部署promethues目录下
+
+   ```
+   ## prometheus-cfg.yaml
+   ## 定义promethues 的配置文件
+   ---
+   kind: ConfigMap
+   apiVersion: v1
+   metadata:
+     labels:
+       app: prometheus
+     name: prometheus-config
+     namespace: prom
+   data:
+     prometheus.yml: |
+       # A scrape configuration for running Prometheus on a Kubernetes cluster.
+       # This uses separate scrape configs for cluster components (i.e. API server, node)
+       # and services to allow each to use different authentication configs.
+       #
+       # Kubernetes labels will be added as Prometheus labels on metrics via the
+       # `labelmap` relabeling action.
+       #
+       # If you are using Kubernetes 1.7.2 or earlier, please take note of the comments
+       # for the kubernetes-cadvisor job; you will need to edit or remove this job.
+       # Scrape config for API servers.
+       #
+       # Kubernetes exposes API servers as endpoints to the default/kubernetes
+       # service so this uses `endpoints` role and uses relabelling to only keep
+       # the endpoints associated with the default/kubernetes service using the
+       # default named port `https`. This works for single API server deployments as
+       # well as HA API server deployments.
+       global:
+         scrape_interval: 15s
+         scrape_timeout: 10s
+         evaluation_interval: 1m
+       scrape_configs:
+       - job_name: 'kubernetes-apiservers'
+         kubernetes_sd_configs:
+         - role: endpoints
+         # Default to scraping over https. If required, just disable this or change to
+         # `http`.
+         scheme: https
+         # This TLS & bearer token file config is used to connect to the actual scrape
+         # endpoints for cluster components. This is separate to discovery auth
+         # configuration because discovery & scraping are two separate concerns in
+         # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+         # the cluster. Otherwise, more config options have to be provided within the
+         # <kubernetes_sd_config>.
+         tls_config:
+           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+           # If your node certificates are self-signed or use a different CA to the
+           # master CA, then disable certificate verification below. Note that
+           # certificate verification is an integral part of a secure infrastructure
+           # so this should only be disabled in a controlled environment. You can
+           # disable certificate verification by uncommenting the line below.
+           #
+           # insecure_skip_verify: true
+         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+         # Keep only the default/kubernetes service endpoints for the https port. This
+         # will add targets for each API server which Kubernetes adds an endpoint to
+         # the default/kubernetes service.
+         relabel_configs:
+         - source_labels: [__meta_kubernetes_namespace, __meta_kubernetes_service_name, __meta_kubernetes_endpoint_port_name]
+           action: keep
+           regex: default;kubernetes;https
+       # Scrape config for nodes (kubelet).
+       #
+       # Rather than connecting directly to the node, the scrape is proxied though the
+       # Kubernetes apiserver.  This means it will work if Prometheus is running out of
+       # cluster, or can't connect to nodes for some other reason (e.g. because of
+       # firewalling).
+       - job_name: 'kubernetes-nodes'
+         # Default to scraping over https. If required, just disable this or change to
+         # `http`.
+         scheme: https
+         # This TLS & bearer token file config is used to connect to the actual scrape
+         # endpoints for cluster components. This is separate to discovery auth
+         # configuration because discovery & scraping are two separate concerns in
+         # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+         # the cluster. Otherwise, more config options have to be provided within the
+         # <kubernetes_sd_config>.
+         tls_config:
+           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+         kubernetes_sd_configs:
+         - role: node
+         relabel_configs:
+         - action: labelmap
+           regex: __meta_kubernetes_node_label_(.+)
+         - target_label: __address__
+           replacement: kubernetes.default.svc:443
+         - source_labels: [__meta_kubernetes_node_name]
+           regex: (.+)
+           target_label: __metrics_path__
+           replacement: /api/v1/nodes/${1}/proxy/metrics
+       # Scrape config for Kubelet cAdvisor.
+       #
+       # This is required for Kubernetes 1.7.3 and later, where cAdvisor metrics
+       # (those whose names begin with 'container_') have been removed from the
+       # Kubelet metrics endpoint.  This job scrapes the cAdvisor endpoint to
+       # retrieve those metrics.
+       #
+       # In Kubernetes 1.7.0-1.7.2, these metrics are only exposed on the cAdvisor
+       # HTTP endpoint; use "replacement: /api/v1/nodes/${1}:4194/proxy/metrics"
+       # in that case (and ensure cAdvisor's HTTP server hasn't been disabled with
+       # the --cadvisor-port=0 Kubelet flag).
+       #
+       # This job is not necessary and should be removed in Kubernetes 1.6 and
+       # earlier versions, or it will cause the metrics to be scraped twice.
+       - job_name: 'kubernetes-cadvisor'
+         # Default to scraping over https. If required, just disable this or change to
+         # `http`.
+         scheme: https
+         # This TLS & bearer token file config is used to connect to the actual scrape
+         # endpoints for cluster components. This is separate to discovery auth
+         # configuration because discovery & scraping are two separate concerns in
+         # Prometheus. The discovery auth config is automatic if Prometheus runs inside
+         # the cluster. Otherwise, more config options have to be provided within the
+         # <kubernetes_sd_config>.
+         tls_config:
+           ca_file: /var/run/secrets/kubernetes.io/serviceaccount/ca.crt
+         bearer_token_file: /var/run/secrets/kubernetes.io/serviceaccount/token
+         kubernetes_sd_configs:
+         - role: node
+         relabel_configs:
+         - action: labelmap
+           regex: __meta_kubernetes_node_label_(.+)
+         - target_label: __address__
+           replacement: kubernetes.default.svc:443
+         - source_labels: [__meta_kubernetes_node_name]
+           regex: (.+)
+           target_label: __metrics_path__
+           replacement: /api/v1/nodes/${1}/proxy/metrics/cadvisor
+       # Scrape config for service endpoints.
+       #
+       # The relabeling allows the actual service scrape endpoint to be configured
+       # via the following annotations:
+       #
+       # * `prometheus.io/scrape`: Only scrape services that have a value of `true`
+       # * `prometheus.io/scheme`: If the metrics endpoint is secured then you will need
+       # to set this to `https` & most likely set the `tls_config` of the scrape config.
+       # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+       # * `prometheus.io/port`: If the metrics are exposed on a different port to the
+       # service then set this appropriately.
+       - job_name: 'kubernetes-service-endpoints'
+         kubernetes_sd_configs:
+         - role: endpoints
+         relabel_configs:
+         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scrape]
+           action: keep
+           regex: true
+         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_scheme]
+           action: replace
+           target_label: __scheme__
+           regex: (https?)
+         - source_labels: [__meta_kubernetes_service_annotation_prometheus_io_path]
+           action: replace
+           target_label: __metrics_path__
+           regex: (.+)
+         - source_labels: [__address__, __meta_kubernetes_service_annotation_prometheus_io_port]
+           action: replace
+           target_label: __address__
+           regex: ([^:]+)(?::\d+)?;(\d+)
+           replacement: $1:$2
+         - action: labelmap
+           regex: __meta_kubernetes_service_label_(.+)
+         - source_labels: [__meta_kubernetes_namespace]
+           action: replace
+           target_label: kubernetes_namespace
+         - source_labels: [__meta_kubernetes_service_name]
+           action: replace
+           target_label: kubernetes_name
+       # Example scrape config for pods
+       #
+       # The relabeling allows the actual pod scrape endpoint to be configured via the
+       # following annotations:
+       #
+       # * `prometheus.io/scrape`: Only scrape pods that have a value of `true`
+       # * `prometheus.io/path`: If the metrics path is not `/metrics` override this.
+       # * `prometheus.io/port`: Scrape the pod on the indicated port instead of the
+       # pod's declared ports (default is a port-free target if none are declared).
+       - job_name: 'kubernetes-pods'
+         # if you want to use metrics on jobs, set the below field to
+         # true to prevent Prometheus from setting the `job` label
+         # automatically.
+         honor_labels: false
+         kubernetes_sd_configs:
+         - role: pod
+         # skip verification so you can do HTTPS to pods
+         tls_config:
+           insecure_skip_verify: true
+         # make sure your labels are in order
+         relabel_configs:
+         # these labels tell Prometheus to automatically attach source
+         # pod and namespace information to each collected sample, so
+         # that they'll be exposed in the custom metrics API automatically.
+         - source_labels: [__meta_kubernetes_namespace]
+           action: replace
+           target_label: namespace
+         - source_labels: [__meta_kubernetes_pod_name]
+           action: replace
+           target_label: pod
+         # these labels tell Prometheus to look for
+         # prometheus.io/{scrape,path,port} annotations to configure
+         # how to scrape
+         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scrape]
+           action: keep
+           regex: true
+         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_path]
+           action: replace
+           target_label: __metrics_path__
+           regex: (.+)
+         - source_labels: [__address__, __meta_kubernetes_pod_annotation_prometheus_io_port]
+           action: replace
+           regex: ([^:]+)(?::\d+)?;(\d+)
+           replacement: $1:$2
+           target_label: __address__
+         - source_labels: [__meta_kubernetes_pod_annotation_prometheus_io_scheme]
+           action: replace
+           target_label: __scheme__
+           regex: (.+)
+   ```
+
+   ```
+   ## prometheus-deploy.yaml
+   ## Deployment
+   ---
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: prometheus-server
+     namespace: prom
+     labels:
+       app: prometheus
+   spec:
+     replicas: 1
+     selector:
+       matchLabels:
+         app: prometheus
+         component: server
+       #matchExpressions:
+       #- {key: app, operator: In, values: [prometheus]}
+       #- {key: component, operator: In, values: [server]}
+     template:
+       metadata:
+         labels:
+           app: prometheus
+           component: server
+         annotations:
+           prometheus.io/scrape: 'false'
+       spec:
+         serviceAccountName: prometheus
+         containers:
+         - name: prometheus
+           image: prom/prometheus:v2.2.1
+           imagePullPolicy: Always
+           command:
+             - prometheus
+             - --config.file=/etc/prometheus/prometheus.yml
+             - --storage.tsdb.path=/prometheus
+             - --storage.tsdb.retention=720h
+           ports:
+           - containerPort: 9090
+             protocol: TCP
+           resources:
+             limits:
+               memory: 2Gi
+           volumeMounts:
+           - mountPath: /etc/prometheus/prometheus.yml
+             name: prometheus-config
+             subPath: prometheus.yml
+           - mountPath: /prometheus/
+             name: prometheus-storage-volume
+         volumes:
+           - name: prometheus-config
+             configMap:
+               name: prometheus-config
+               items:
+                 - key: prometheus.yml
+                   path: prometheus.yml
+                   mode: 0644
+           - name: prometheus-storage-volume
+             emptyDir: {}
+   ```
+
+   ```
+   ## prometheus-rbac.yaml
+   ## 定义角色 和账户以及进行绑定
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1beta1
+   kind: ClusterRole
+   metadata:
+     name: prometheus
+   rules:
+   - apiGroups: [""]
+     resources:
+     - nodes
+     - nodes/proxy
+     - services
+     - endpoints
+     - pods
+     verbs: ["get", "list", "watch"]
+   - apiGroups:
+     - extensions
+     resources:
+     - ingresses
+     verbs: ["get", "list", "watch"]
+   - nonResourceURLs: ["/metrics"]
+     verbs: ["get"]
+   ---
+   apiVersion: v1
+   kind: ServiceAccount
+   metadata:
+     name: prometheus
+     namespace: prom
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1beta1
+   kind: ClusterRoleBinding
+   metadata:
+     name: prometheus
+   roleRef:
+     apiGroup: rbac.authorization.k8s.io
+     kind: ClusterRole
+     name: prometheus
+   subjects:
+   - kind: ServiceAccount
+     name: prometheus
+     namespace: prom
+   ```
+
+   ```
+   ## prometheus-svc.yaml
+   ## 定义service 进行访问
+   ---
+   apiVersion: v1
+   kind: Service
+   metadata:
+     name: prometheus
+     namespace: prom
+     labels:
+       app: prometheus
+   spec:
+     type: NodePort
+     ports:
+       - port: 9090
+         targetPort: 9090
+         nodePort: 30090
+         protocol: TCP
+     selector:
+       app: prometheus
+       component: server
+   ```
+
+   ![1569746581917](assets/1569746581917.png)
+
+4. 部署 **kube-state-metrics**
+
+   ![1569746739125](assets/1569746739125.png)
+
+   ```
+   实际是由 kube-state-metrics 对promethues 中存储的数据进行格式的转换
+   ```
+
+   ```
+   ## kube-state-metrics-deploy.yaml
+   ## 
+   apiVersion: apps/v1
+   kind: Deployment
+   metadata:
+     name: kube-state-metrics
+     namespace: prom
+   spec:
+     replicas: 1
+     selector:
+       matchLabels:
+         app: kube-state-metrics
+     template:
+       metadata:
+         labels:
+           app: kube-state-metrics
+       spec:
+         serviceAccountName: kube-state-metrics
+         containers:
+         - name: kube-state-metrics
+           image: gcr.io/google_containers/kube-state-metrics-amd64:v1.3.1
+           ports:
+           - containerPort: 8080
+   ```
+
+   ```
+   ## kube-state-metrics-rbac.yaml
+   ---
+   apiVersion: v1
+   kind: ServiceAccount
+   metadata:
+     name: kube-state-metrics
+     namespace: prom
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRole
+   metadata:
+     name: kube-state-metrics
+   rules:
+   - apiGroups: [""]
+     resources: ["nodes", "pods", "services", "resourcequotas", "replicationcontrollers", "limitranges", "persistentvolumeclaims", "persistentvolumes", "namespaces", "endpoints"]
+     verbs: ["list", "watch"]
+   - apiGroups: ["extensions"]
+     resources: ["daemonsets", "deployments", "replicasets"]
+     verbs: ["list", "watch"]
+   - apiGroups: ["apps"]
+     resources: ["statefulsets"]
+     verbs: ["list", "watch"]
+   - apiGroups: ["batch"]
+     resources: ["cronjobs", "jobs"]
+     verbs: ["list", "watch"]
+   - apiGroups: ["autoscaling"]
+     resources: ["horizontalpodautoscalers"]
+     verbs: ["list", "watch"]
+   ---
+   apiVersion: rbac.authorization.k8s.io/v1
+   kind: ClusterRoleBinding
+   metadata:
+     name: kube-state-metrics
+   roleRef:
+     apiGroup: rbac.authorization.k8s.io
+     kind: ClusterRole
+     name: kube-state-metrics
+   subjects:
+   - kind: ServiceAccount
+     name: kube-state-metrics
+     namespace: prom
+   ```
+
+   ```
+   ## kube-state-metrics-svc.yaml
+   apiVersion: v1
+   kind: Service
+   metadata:
+     annotations:
+       prometheus.io/scrape: 'true'
+     name: kube-state-metrics
+     namespace: prom
+     labels:
+       app: kube-state-metrics
+   spec:
+     ports:
+     - name: kube-state-metrics
+       port: 8080
+       protocol: TCP
+     selector:
+       app: kube-state-metrics
+   ```
+
+5.  部署k8s-promethues-adapter
+
+   ```
+   adapter的运行需要使用https 进行，所以首先需要自制证书
+   ```
+
+   **创建证书**
+
+   ![1569747303784](assets/1569747303784.png)
+
+   **创建secret**
+
+   ![1569747450142](assets/1569747450142.png)
+
+   ```
+   创建secret 的名字为 cm-adapter-serving-certs 是因为 custom-metrics-apiserver-deployment.yaml 文件使用这个secret进行连接认证
+   ```
+
+   ```
+   参考 https://github.com/stefanprodan/k8s-prom-hpa 进行部署（更改名称空间为prom即可）
+   ```
+
+**部署完成后会出现 新的自定义的API**
+
+![1569748032136](assets/1569748032136.png)
+
+![1569748086748](assets/1569748086748.png)
+
+![1569748098106](assets/1569748098106.png)
+
+```
+获取的指标数据
+```
+
+#### 安装grafana（promethues数据展示）
+
+```
+# apiVersion: extensions/v1beta1
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: monitoring-grafana
+  namespace: prom		## 更改为 prom
+spec:
+  replicas: 1
+  selector:	## 需要添加的，如果 apiversion: apps/v1
+    matchlables:
+     task: monitoring
+     k8s-app: grafana
+  template:
+    metadata:
+      labels:
+        task: monitoring
+        k8s-app: grafana
+    spec:
+      containers:
+      - name: grafana
+        image: k8s.gcr.io/heapster-grafana-amd64:v5.0.4
+        ports:
+        - containerPort: 3000
+          protocol: TCP
+        volumeMounts:
+        - mountPath: /etc/ssl/certs
+          name: ca-certificates
+          readOnly: true
+        - mountPath: /var
+          name: grafana-storage
+        env:
+        #- name: INFLUXDB_HOST		## 取出使用influxdb
+        #  value: monitoring-influxdb
+        - name: GF_SERVER_HTTP_PORT
+          value: "3000"
+          # The following env variables are required to make Grafana accessible via
+          # the kubernetes api-server proxy. On production clusters, we recommend
+          # removing these env variables, setup auth for grafana, and expose the grafana
+          # service using a LoadBalancer or a public IP.
+        - name: GF_AUTH_BASIC_ENABLED
+          value: "false"
+        - name: GF_AUTH_ANONYMOUS_ENABLED
+          value: "true"
+        - name: GF_AUTH_ANONYMOUS_ORG_ROLE
+          value: Admin
+        - name: GF_SERVER_ROOT_URL
+          # If you're only using the API Server proxy, set this value instead:
+          # value: /api/v1/namespaces/kube-system/services/monitoring-grafana/proxy
+          value: /
+      volumes:
+      - name: ca-certificates
+        hostPath:
+          path: /etc/ssl/certs
+      - name: grafana-storage
+        emptyDir: {}
+---
+apiVersion: v1
+kind: Service
+metadata:
+  labels:
+    # For use as a Cluster add-on (https://github.com/kubernetes/kubernetes/tree/master/cluster/addons)
+    # If you are NOT using this as an addon, you should comment out this line.
+    kubernetes.io/cluster-service: 'true'
+    kubernetes.io/name: monitoring-grafana
+  name: monitoring-grafana
+  namespace: prom		## 更改名称空间为 prom
+spec:
+  # In a production setup, we recommend accessing Grafana through an external Loadbalancer
+  # or through a public IP.
+  # type: LoadBalancer
+  # You could also use NodePort to expose the service at a randomly-generated port
+  # type: NodePort
+  ports:
+  - port: 80
+    targetPort: 3000
+  type: NodePort		## 映射到主机节点
+  selector:
+    k8s-app: grafana
+```
+
+![1569749076853](assets/1569749076853.png)
+
+```
+promethues svc的信息
+```
+
+![1569749157361](assets/1569749157361.png)
+
+```
+配置 URL的时候 promethues 为 svc 的名字 prom 为名称空间 svc 为 默认的 svc 乐行的后缀
+```
+
+![1569749230919](assets/1569749230919.png)
+
+```
+导入默认的promethues 的模板
+```
+
+![1569749280696](assets/1569749280696.png)
+
+```
+下载定义好的 grafana 的模板
+```
+
+![1569749335917](assets/1569749335917.png)
+
+```
+导入dashboard
+```
+
+![1569749364614](assets/1569749364614.png)
+
+#### 使用HPA自动进行资源伸缩扩展
+
+##### 命令行创建HPA
+
+![1569750752481](assets/1569750752481.png)
+
+```
+创建deployment 的测试pod
+```
+
+![1569750860418](assets/1569750860418.png)
+
+```
+命令行创建的HPA
+```
+
+![1569750930864](assets/1569750930864.png)
+
+```
+导出端口进行测试
+```
+
+![1569750960231](assets/1569750960231.png)
+
+```
+使用ab进行压力测试
+```
+
+![1569751002625](assets/1569751002625.png)
+
+![1569751013032](assets/1569751013032.png)
+
+```
+现在已经进行扩展到了2个pod
+```
+
+##### 资源清单创建HPA
+
+![1569751128429](assets/1569751128429.png)
+
+![1569751167714](assets/1569751167714.png)
+
+![1569751216173](assets/1569751216173.png)
+
+##### 通过prom自定义的指标进行HPA
+
+![1569751312279](assets/1569751312279.png)
+
+![1569751396883](assets/1569751396883.png)
+
+```
+http_requests 为自己写的exporter 输出的监控指标到promethues
+通过这个指标（http 的连接数）进行扩展pod的数量
+```
+
+### Helm入门
 
