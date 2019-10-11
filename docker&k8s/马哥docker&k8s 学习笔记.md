@@ -4967,3 +4967,478 @@ http_requests 为自己写的exporter 输出的监控指标到promethues
 
 ### Helm入门
 
+![1570608846586](assets/1570608846586.png)
+
+```
+Chart： 是资源配置文件的集合，以及一些模板文件和值文件提供自定义功能（可配置的发布）
+helm 将远端的仓库的 Chart 资源下载到本地，调用部署在集群中的Tiller(与k8s API server 进行交互部署Chart的资源，Tiller 在helm v3版本中已经去除，不需要安装)，已经发布的Chart为 release，用于历史记录，回滚等。
+```
+
+#### Helm的核心术语
+
+```
+Chart：一个helm的程序要，包括k8s 的各种的资源定义的文件
+Repository：Charts 的仓库，http的服务器，应用程序集中放置的位置
+Release：特定的Chart 部署在目标集群中的一个实例
+
+Chart -> config(值文件、模板文件) -> Release
+```
+
+#### Helm的程序架构
+
+```
+helm：客户端，管理本地的Chart的仓库，下载远端的Chart的资源，与Tiller的服务进行交互，发送Chart用于安装查询卸载的操作
+Tiller：服务端，接受helm发送来的Chart 与config 合并部署生成release
+```
+
+#### 安装helm客户端
+
+![1570611782084](assets/1570611782084.png)
+
+![1570611805378](assets/1570611805378.png)
+
+```
+helm 第一次init 的时候需要连接到 API server，由API server控制进行tiller的pod安装。
+helm需要使用 kubectl 的config 文件进行鉴权验证去连接到api server
+```
+
+#### 设置helm 的RBAC账户
+
+`rbac-config.yaml`:
+
+```
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: tiller
+  namespace: kube-system
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: tiller
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: cluster-admin
+subjects:
+  - kind: ServiceAccount
+    name: tiller
+    namespace: kube-system
+```
+
+![1570612457668](assets/1570612457668.png)
+
+![1570612794786](assets/1570612794786.png)
+
+![1570612865810](assets/1570612865810.png)
+
+#### helm 命令行基本使用
+
+![1570614074001](assets/1570614074001.png)
+
+```
+更新仓库
+官方的仓库为：https://hub.kubeapps.com/
+```
+
+![1570614289994](assets/1570614289994.png)
+
+```
+可用的仓库的列表
+```
+
+![1570676105422](assets/1570676105422.png)
+
+```
+查看仓库的所有的 Charts
+```
+
+![1570676148402](assets/1570676148402.png)
+
+```
+搜索特定的Chart
+```
+
+![1570676241587](assets/1570676241587.png)
+
+```
+查看 jenkins的详细的信息
+```
+
+![1570693536032](assets/1570693536032.png)
+
+#### helm 安装应用
+
+![1570676475385](assets/1570676475385.png)
+
+```
+安装memcached 所使用的k8s 的资源
+```
+
+![1570676608954](assets/1570676608954.png)
+
+![1570676814233](assets/1570676814233.png)
+
+```
+删除安装的 release，并查看安装列表
+```
+
+### 创建自定义Chart
+
+#### Chart的文档目录
+
+![1570677424462](assets/1570677424462.png)
+
+![1570763507060](assets/1570763507060.png)
+
+```
+Chart.yaml: 当前Chart的源数据信息，Chart的版本，名称，维护者，内部的应用程序版本
+requirements.yaml: Chart 的依赖信息
+templates: 下为Chart 使用的所有的资源清单的模板文件
+	NOTES.txt 文件是安装成功之后，提示给用户的安装提示信息
+values.yaml: 模板中使用的变量的值，自定义的值
+
+charts/: 目录，包含当前chart 所依赖的其他的Chart的打包格式的文件（tgz）,只要放在charts 目录下的tgz格式的文件都应该被依赖，不论是否在requirements.yaml 是否存在
+
+helm 有命令可以生成基础的Chart 的目录结构，只需进行适当的修改就可以使用
+```
+
+#### THE CHART.YAML FILE
+
+The `Chart.yaml` file is required for a chart. It contains the following fields:
+
+```yaml
+apiVersion: The chart API version, always "v1" (required)
+name: The name of the chart (required)
+	## 要与Chart的目录名保持一致
+version: A SemVer 2 version (required)
+	## 版本格式定义规范
+kubeVersion: A SemVer range of compatible Kubernetes versions (optional)
+	## 限定 适用的kubernetes 版本
+description: A single-sentence description of this project (optional)
+keywords:
+  - A list of keywords about this project (optional)
+home: The URL of this project's home page (optional)
+sources:
+  - A list of URLs to source code for this project (optional)
+  	## 这个Chart如果基于别人的开发，Chart的来源
+maintainers: # (optional)
+	## 现有的维护者的信息
+  - name: The maintainer's name (required for each maintainer)
+    email: The maintainer's email (optional for each maintainer)
+    url: A URL for the maintainer (optional for each maintainer)
+    	## 个人主页
+engine: gotpl # The name of the template engine (optional, defaults to gotpl)
+icon: A URL to an SVG or PNG image to be used as an icon (optional).
+appVersion: The version of the app that this contains (optional). This needn't be SemVer.
+deprecated: Whether this chart is deprecated (optional, boolean)
+tillerVersion: The version of Tiller that this chart requires. This should be expressed as a SemVer range: ">2.0.0" (optional)
+```
+
+#### Managing Dependencies with `requirements.yaml`
+
+A `requirements.yaml` file is a simple file for listing your dependencies.
+
+```
+dependencies 下面的对象为一个列表，每一个列表都是一个被依赖的Chart
+```
+
+```yaml
+dependencies:
+  - name: apache
+    version: 1.2.3
+    repository: http://example.com/charts
+  - name: mysql
+    version: 3.2.1
+    repository: http://another.example.com/charts
+```
+
+- The `name` field is the name of the chart you want.
+- The `version` field is the version of the chart you want.
+- The `repository` field is the full URL to the chart repository. Note that you must also use `helm repo add` to add that repo locally.
+
+```
+$ helm dep up foochart	(helm dependency update)
+	## 使用dep 命令进行分析，下载相应的Chart 到charts目录中
+Hang tight while we grab the latest from your chart repositories...
+...Successfully got an update from the "local" chart repository
+...Successfully got an update from the "stable" chart repository
+...Successfully got an update from the "example" chart repository
+...Successfully got an update from the "another" chart repository
+Update Complete.
+Saving 2 charts
+Downloading apache from repo http://example.com/charts
+Downloading mysql from repo http://another.example.com/charts
+```
+
+#### Template Files
+
+Template files follow the standard conventions for writing Go templates (see [the text/template Go package documentation](https://golang.org/pkg/text/template/) for details). An example template file might look something like this:
+
+```
+template 文件使用的是Go的模板语法
+```
+
+```yaml
+apiVersion: v1
+kind: ReplicationController
+metadata:
+  name: deis-database
+  namespace: deis
+  labels:
+    app.kubernetes.io/managed-by: deis
+spec:
+  replicas: 1
+  selector:
+    app.kubernetes.io/name: deis-database
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: deis-database
+    spec:
+      serviceAccount: deis-database
+      containers:
+        - name: deis-database
+          image: {{.Values.imageRegistry}}/postgres:{{.Values.dockerTag}}
+          imagePullPolicy: {{.Values.pullPolicy}}
+          	## 以 .Values 开头则 值来自于values.yaml文件顶级字段
+          ports:
+            - containerPort: 5432
+          env:
+            - name: DATABASE_STORAGE
+              value: {{default "minio" .Values.storage}}
+              	## 对应的key不存在的时候，可以使用default 设置默认值
+```
+
+The above example, based loosely on https://github.com/deis/charts, is a template for a Kubernetes replication controller. It can use the following four template values (usually defined in a `values.yaml` file):
+
+- `imageRegistry`: The source registry for the Docker image.
+- `dockerTag`: The tag for the docker image.
+- `pullPolicy`: The Kubernetes pull policy.
+- `storage`: The storage backend, whose default is set to `"minio"`
+
+#### Predefined Values（内置的变量）
+
+Values that are supplied via a `values.yaml` file (or via the `--set` flag) are accessible from the `.Values` object in a template. But there are other pre-defined pieces of data you can access in your templates.
+
+The following values are pre-defined, are available to every template, and cannot be overridden. As with all values, the names are *case sensitive*.
+
+- `Release.Name`: The name of the release (not the chart)
+- `Release.Time`: The time the chart release was last updated. This will match the `Last Released` time on a Release object.
+- `Release.Namespace`: The namespace the chart was released to.
+- `Release.Service`: The service that conducted the release. Usually this is `Tiller`.
+- `Release.IsUpgrade`: This is set to true if the current operation is an upgrade or rollback.
+- `Release.IsInstall`: This is set to true if the current operation is an install.
+- `Release.Revision`: The revision number. It begins at 1, and increments with each `helm upgrade`.
+- `Chart`: The contents of the `Chart.yaml`. Thus, the chart version is obtainable as `Chart.Version` and the maintainers are in `Chart.Maintainers`.
+- `Files`: A map-like object containing all non-special files in the chart. This will not give you access to templates, but will give you access to additional files that are present (unless they are excluded using `.helmignore`). Files can be accessed using `{{index .Files "file.name"}}` or using the `{{.Files.Get name}}` or `{{.Files.GetString name}}` functions. You can also access the contents of the file as `[]byte` using `{{.Files.GetBytes}}`
+- `Capabilities`: A map-like object that contains information about the versions of Kubernetes (`{{.Capabilities.KubeVersion}}`, Tiller (`{{.Capabilities.TillerVersion}}`, and the supported Kubernetes API versions (`{{.Capabilities.APIVersions.Has "batch/v1"`)
+
+#### Values files
+
+Considering the template in the previous section, a `values.yaml` file that supplies the necessary values would look like this:
+
+```yaml
+imageRegistry: "quay.io/deis"
+dockerTag: "latest"
+pullPolicy: "Always"
+storage: "s3"
+```
+
+A values file is formatted in YAML. A chart may include a default `values.yaml` file. The Helm install command allows a user to override values by supplying additional YAML values:
+
+```console
+$ helm install --values=myvals.yaml wordpress
+```
+
+#### 创建自己的Chart
+
+![1570775185520](assets/1570775185520.png)
+
+![1570775737652](assets/1570775737652.png)
+
+```
+Chart.yaml 文件
+```
+
+![1570776212652](assets/1570776212652.png)
+
+![1570776388494](assets/1570776388494.png)
+
+```
+deployment.yaml 文件
+template 引用的是当前的模板的信息
+```
+
+![1570776417174](assets/1570776417174.png)
+
+```
+service.yaml 配置service资源的配置
+```
+
+![1570776518973](assets/1570776518973.png)
+
+```
+ingress.yaml 配置ingress的资源配置
+```
+
+![1570776842789](assets/1570776842789.png)
+
+![1570776872298](assets/1570776872298.png)
+
+```
+values.yaml 模板的值文件配置
+```
+
+![1570777025219](assets/1570777025219.png)
+
+```
+使用 helm lint myapp 来检查Chart的配置是否错误
+```
+
+![1570777436500](assets/1570777436500.png)
+
+```
+对Chart进行打包
+```
+
+![1570778238590](assets/1570778238590.png)
+
+```
+启动 helm 内置的http服务，用于仓库服务
+```
+
+![1570778295486](assets/1570778295486.png)
+
+```
+此时使用 helm search myapp 则可以查看到本地仓库的myapp
+```
+
+#### 使用Chart创建服务
+
+![1570782437551](assets/1570782437551.png)
+
+![1570782475145](assets/1570782475145.png)
+
+```
+查看部署的状态
+```
+
+![1570782682601](assets/1570782682601.png)
+
+```
+使用purge 清除myapp
+```
+
+![1570783677836](assets/1570783677836.png)
+
+```
+添加新的仓库
+```
+
+#### 使用helm部署EFK日志系统
+
+**部署Elasticsearch**
+
+![1570787516136](assets/1570787516136.png)
+
+```
+fetch elasticsearch Chart
+```
+
+![1570787648647](assets/1570787648647.png)
+
+```
+更改 values.yaml 文件，符合当前的集群资源要求，这里不适用持久存储，使用本地存储。
+```
+
+![1570787720013](assets/1570787720013.png)
+
+```
+安装 更改后的 elasticsearch，使用更改后的values文件
+```
+
+![1570787813269](assets/1570787813269.png)
+
+![1570787855308](assets/1570787855308.png)
+
+```
+安装之后的提示信息
+以及，es 集群的访问端点
+```
+
+![1570787951117](assets/1570787951117.png)
+
+```
+所有的节点准备完成
+```
+
+![1570788019649](assets/1570788019649.png)
+
+![1570788064885](assets/1570788064885.png)
+
+![1570788112957](assets/1570788112957.png)
+
+```
+使用cirror 镜像进行域名的解析测试
+ES的集群已经可以正常连接
+ES集群的node的节点信息
+```
+
+**部署fluentd-elasticsearch**
+
+![1570788242116](assets/1570788242116.png)
+
+```
+下载fluentd-elasticseach Charts
+```
+
+![1570788305324](assets/1570788305324.png)
+
+![1570788410581](assets/1570788410581.png)
+
+```
+更改values.yaml 的值
+添加annotations 使可以使用prometheus 进行监控
+添加 tolerations 可以监控master节点上的日志
+service 暴露服务
+```
+
+![1570788626674](assets/1570788626674.png)
+
+```
+部署fluentd-elasticsearch
+```
+
+![1570788705488](assets/1570788705488.png)
+
+```
+可以看到有logstash的索引生成了，证明部署成功。
+```
+
+**部署kibana**
+
+![1570788787019](assets/1570788787019.png)
+
+![1570788828297](assets/1570788828297.png)
+
+![1570788859563](assets/1570788859563.png)
+
+```
+更改ES的地址
+更改service的类型为 NodePort
+```
+
+![1570788898918](assets/1570788898918.png)
+
+```
+安装kibana
+```
+
+![1570788949980](assets/1570788949980.png)
+
+![1570788990427](assets/1570788990427.png)
+
+### 基于kubernetes的Paas概述
+
