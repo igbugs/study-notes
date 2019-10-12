@@ -5442,3 +5442,17 @@ service 暴露服务
 
 ### 基于kubernetes的Paas概述
 
+![1570848024998](assets/1570848024998.png)
+
+```
+1. developers 将应用程序的代码推送到git 之后，jenkins 对应用程序进行编译构建以及测试
+2. developers 在代码提交的同时提供了 Dockerfile 文件，推送到git，构建的时候使用docker build 构建应用程序的镜像，之后推送到镜像仓库
+3. 运维人员配置 helm Chart，推送到 Chart 仓库，部署的时候直接拉取Chart文件，拉取使用的镜像，直接在kubernetes集群上进行部署
+```
+
+![1570849330323](assets/1570849330323.png)
+
+```
+PaaS 各组件分布
+```
+
