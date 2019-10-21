@@ -758,6 +758,35 @@ b3 共享使用b2 的存储卷
 nginx使用了infracon的存储卷
 ```
 
+#### 挂载volume方式
+
+1）第一种方式
+
+```
+docker volume create --name volume_first
+docker run -d -v volume_first:/data docker.io/centos /bin/bash
+```
+
+2）第二种方式
+
+```
+docker run -d -v /data docker.io/centos /bin/bash
+```
+
+3）第三种方式，将宿主机上的目录挂载到容器中
+
+```
+docker run -d -v /docker/data:/data docker.io/centos
+```
+
+将宿主机的/docker/data文件夹作为一个volume挂载到容器中的/data。目录必须使用绝对路径，如果宿主机中不存在/docker/data目录，将创建一个新的目录。在/docker/data目录中的所有文件或文件夹可以在容器的/data目录下被访问。如果镜像中原本存在/data文件夹，该目录下的所有内容将被隐藏，以保持与宿主机中的目录一致。
+
+4）在volume挂载时，还可以指定volume的权限，如只读ro，也可以在volume挂载时使用z和Z来指定该volume是否可以共享。Docekr中默认的是z，及共享volume；使用Z表示私有该数据卷；使用多个-v标签为容器添加多个volume
+
+```
+docker run -d -v /docker/data:/data:ro -v /docker/data2:/data2:z docker.io/centos
+```
+
 #### 使用Go模板语法查看容器的信息
 
 ![1571214198157](assets/1571214198157.png)
@@ -1124,4 +1153,112 @@ build的时候 ONBUILD 并没有去下载 rpm包
 ```
 此时的ONBUILD进行了执行
 ```
+
+### Docker Registry
+
+![1571626703355](assets/1571626703355.png)
+
+![1571627454890](assets/1571627454890.png)
+
+![1571627534991](assets/1571627534991.png)
+
+```
+1. 多租户
+2. 安全和风险分析
+3. 审计日志
+4. 标识集成和基于角色的访问控制
+5. 镜像副本
+6. 可扩展API和图形界面
+7. 国际化
+```
+
+![1571638752048](assets/1571638752048.png)
+
+```
+devel 是一个项目（名称空间），下面可以存在很多的镜像
+```
+
+![1571638833289](assets/1571638833289.png)
+
+![1571638897412](assets/1571638897412.png)
+
+```
+配置为非安全仓库，不指定 80 亦可
+```
+
+![1571638942468](assets/1571638942468.png)
+
+```
+为镜像打标签
+```
+
+![1571639010183](assets/1571639010183.png)
+
+```
+首先进行登录，之后再进行push
+```
+
+![1571639185594](assets/1571639185594.png)
+
+### Docker 系统资源限制及验证
+
+![1571641007193](assets/1571641007193.png)
+
+```
+默认的情况下 容器是没有任何的资源限制的，可以使用主机的 内核调度的所有的资源
+docker 提供了方式去限制 容器的CPU，MEMORY，BlockIO的方式限制容器使用的资源
+```
+
+![1571641195373](assets/1571641195373.png)
+
+```
+资源限制 可以从上面的8个方面进行限制
+大类分为名称空间和Cgroup进行
+```
+
+![1571641400240](assets/1571641400240.png)
+
+```
+Linux 内核探测到如果没有足够的内存去执行重要的系统功能，会抛出OOME，进行kill process 释放内存；
+内核通过一系列算法，得出OOM_score 的得分进行选择kill的 process 的对象，得分越高最先被kill；
+OOM_adj 参数的大小可以影响 OOM_score 的得分，可以将重要的进程的 OOM_adj(优先级)调低进而影响 得分来保护重要的进程。
+```
+
+![1571642712219](assets/1571642712219.png)
+
+```
+--memory-swap 的生效依赖于 -m 的指定
+--memory-swappiness 设定容器使用swap的倾向性，0 不使用，100 使用
+--memory-reservation 预留的内存空间
+--oom-kill-disable 设置为true 可以禁止oom的kill
+```
+
+![1571642754262](assets/1571642754262.png)
+
+```
+1. S=M 则相当于禁用了 swap 资源
+2. S=0 等同于 unset
+3. S unset memory为M，则容器的可用 swap为 2M
+4. S= -1 则可以使用主机上的最大的swap资源
+```
+
+![1571648138907](assets/1571648138907.png)
+
+```
+1. 默认的使用的是 CFS(Completely fair scheduling) 调度器	
+	CPU 的核心数量一定是小于进程数的，大量的进程谁应该优先的运行呢？这种的调度为 非实时优先级的调度，调度的优先级为 100-139 之间，使用nice进行调整（nice的值为 [-20, 19]）, 所以每一个进程默认的 权重为 120（默认nice为0）, 当nice调小时，优先级就高。
+	实时调度(realtime scheduler)的优先级 [0-99]，一般为系统级的进程
+```
+
+![1571642862974](assets/1571642862974.png)
+
+```
+--cpu-shares  按照容器的CPU使用的限制，按比例均分CPU资源进行使用，当某些容器负载较低用不到所分配的cpu资源时，会共享出去供其他容器使用（或抢占其他的容器的资源）
+--cpus  限定最多使用的CPU核心数
+--cpuset-cpus 指定容器可以运行在哪个CPU上
+--cpu-period 限制CPU使用的时间
+--cpu-quota CPU配额的使用
+```
+
+![1571650394532](assets/1571650394532.png)
 
