@@ -1,8 +1,8 @@
 ## Prometheus开源监控系统技术全剖析
 
-### Promethues 序章
+### prometheus 序章
 
-#### Promethues 架构
+#### prometheus 架构
 
 ![1571814046960](assets/1571814046960.png)
 
@@ -12,7 +12,7 @@
 
 ![1571815080396](assets/1571815080396.png)
 
-#### Promethues的特点
+#### prometheus的特点
 
 ![1571814975354](assets/1571814975354.png)
 
@@ -72,7 +72,7 @@
 
 ![1571984123317](assets/1571984123317.png)
 
-### 第三讲 Promethues 监控入门
+### 第三讲 prometheus 监控入门
 
 ![1571984479091](assets/1571984479091.png)
 
@@ -86,7 +86,7 @@
 
 ![1571985475103](assets/1571985475103.png)
 
-#### Promethues命令行
+#### prometheus命令行
 
 ![1571985654474](assets/1571985654474.png)
 
@@ -99,30 +99,30 @@
 ![1571985889690](assets/1571985889690.png)
 
 ```
-默认的promethues 配置文件	
+默认的prometheus 配置文件	
 ```
 
 ![1571985926046](assets/1571985926046.png)
 
 ```
-Targets显示promethues的监控的节点
+Targets显示prometheus的监控的节点
 ```
 
 ![1571986016285](assets/1571986016285.png)
 
-### 第四讲 Promethues运行框架介绍
+### 第四讲 prometheus运行框架介绍
 
 ![1571814046960](assets/1571814046960.png)
 
-#### Promethues Server
+#### prometheus Server
 
 ![1571986279201](assets/1571986279201.png)
 
-##### Promethues Storage
+##### prometheus Storage
 
 ![1571986740768](assets/1571986740768.png)
 
-#### Promethues 服务发现配置
+#### prometheus 服务发现配置
 
 ![1571986922471](assets/1571986922471.png)
 
@@ -132,13 +132,13 @@ Targets显示promethues的监控的节点
 
 ![1571987027053](assets/1571987027053.png)
 
-#### Promethues的采集客户端
+#### prometheus的采集客户端
 
 ![1571987141734](assets/1571987141734.png)
 
 ![1571987210356](assets/1571987210356.png)
 
-### Promethues 监控数据格式
+### prometheus 监控数据格式
 
 ![1571987891147](assets/1571987891147.png)
 
@@ -162,7 +162,7 @@ Targets显示promethues的监控的节点
 
 ![1571989252565](assets/1571989252565.png)
 
-#### Promethues k/v数据格式
+#### prometheus k/v数据格式
 
 ![1571990473668](assets/1571990473668.png)
 
@@ -179,7 +179,9 @@ exporter会实时的抓取服务的数据，执行curl 之后的返回数据
 
 ![1571991998484](assets/1571991998484.png)
 
-### 第六讲 Promethues 初探和配置
+### 第六讲 prometheus 初探和配置
+
+#### Prometheus 的启动和配置
 
 **同步系统时间**
 
@@ -202,7 +204,7 @@ wget https://github.com/prometheus/prometheus/releases/download/v2.13.1/promethe
 [root@localhost local]# ln -s prometheus-2.13.1.linux-amd64/ prometheus
 ```
 
-**启动promethues**
+**启动prometheus**
 
 ```
 [root@localhost prometheus]# ./prometheus 
@@ -224,6 +226,147 @@ level=info ts=2019-10-25T09:24:53.545Z caller=main.go:626 msg="Server is ready t
 ```
 
 ```
-访问9090端口可以看到默认的promethues 界面
+访问9090端口可以看到默认的prometheus 界面
 ```
+
+![image-20191028171833495](assets/image-20191028171833495.png)
+
+**Prometheus 配置文件**
+
+```
+
+# my global config
+global:
+  scrape_interval:     15s # Set the scrape interval to every 15 seconds. Default is every 1 minute.
+  evaluation_interval: 15s # Evaluate rules every 15 seconds. The default is every 1 minute.
+  # scrape_timeout is set to the global default (10s).
+
+# Alertmanager configuration
+alerting:
+  alertmanagers:
+  - static_configs:
+    - targets:
+      # - alertmanager:9093
+
+# Load rules once and periodically evaluate them according to the global 'evaluation_interval'.
+rule_files:
+  # - "first_rules.yml"
+  # - "second_rules.yml"
+
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['localhost:9090']
+```
+
+![image-20191028172321024](assets/image-20191028172321024.png)
+
+![image-20191028174142503](assets/image-20191028174142503.png)
+
+```
+# A scrape configuration containing exactly one endpoint to scrape:
+# Here it's Prometheus itself.
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+  	## 定义了一个监控的名称
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['localhost:9090']
+    	## 定义监控的机器服务目标
+```
+
+![image-20191028174531618](assets/image-20191028174531618.png)
+
+![image-20191028174609332](assets/image-20191028174609332.png)
+
+#### Prometheus 监控CPU使用率实例
+
+![image-20191029154056172](assets/image-20191029154056172.png)
+
+![image-20191029154404524](assets/image-20191029154404524.png)
+
+```
+安装node_exporter 之后收集到的 CPU的时间片的信息
+```
+
+![image-20191029154504234](assets/image-20191029154504234.png)
+
+![image-20191029154659959](assets/image-20191029154659959.png)
+
+![image-20191029154808807](assets/image-20191029154808807.png)
+
+![image-20191029155204796](assets/image-20191029155204796.png)
+
+![image-20191029155308623](assets/image-20191029155308623.png)
+
+```
+idle 状态的CPU的使用时间总和，用 1 减去，得到不是idle状态的CPU使用时间
+再使用node_cpu 的所有mode状态总和时间，求得的比率
+
+(1 - sum(increase(node_cpu_seconds_total{mode="idle"}[1m])) by (instance) / sum(increase(node_cpu_seconds_total[1m])) by (instance)) * 100
+```
+
+![image-20191030103716818](assets/image-20191030103716818.png)
+
+### 第七讲 Prometheus 数学理论基础学习
+
+![image-20191029161448452](assets/image-20191029161448452.png)
+
+![image-20191029161612579](assets/image-20191029161612579.png)
+
+![image-20191029161816778](assets/image-20191029161816778.png)
+
+![image-20191029161949319](assets/image-20191029161949319.png)
+
+![image-20191029162229545](assets/image-20191029162229545.png)
+
+**CPU使用率的计算公式的拆分**
+
+![image-20191029163011392](assets/image-20191029163011392.png)
+
+![image-20191029163100108](assets/image-20191029163100108.png)
+
+```
+mode 指定CPU耗时的类型，mode实际上为一个标签
+node_cpu 没有过滤条件(标签)，实际上是全部的CPU时间
+```
+
+![image-20191029163258139](assets/image-20191029163258139.png)
+
+![image-20191029163328627](assets/image-20191029163328627.png)
+
+![image-20191029163357937](assets/image-20191029163357937.png)
+
+![image-20191029163541319](assets/image-20191029163541319.png)
+
+![image-20191029163704472](assets/image-20191029163704472.png)
+
+![image-20191029163905180](assets/image-20191029163905180.png)
+
+![image-20191029164051179](assets/image-20191029164051179.png)
+
+### 第八讲 Prometheus命令行使用扩展
+
+#### **采集的数据使用lable 进行过滤**
+
+![image-20191029164800130](assets/image-20191029164800130.png)
+
+![image-20191029164939322](assets/image-20191029164939322.png)
+
+![image-20191029165014053](assets/image-20191029165014053.png)
+
+#### counter类型数据每秒平均数
+
+##### rate函数
 
