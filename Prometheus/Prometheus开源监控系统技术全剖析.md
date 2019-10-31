@@ -370,3 +370,266 @@ node_cpu 没有过滤条件(标签)，实际上是全部的CPU时间
 
 ##### rate函数
 
+![image-20191030141441618](assets/image-20191030141441618.png)
+
+```
+示例 展示了 过去5min 平均每秒的数据请求数
+```
+
+![image-20191030141645405](assets/image-20191030141645405.png)
+
+![image-20191030142730009](assets/image-20191030142730009.png)
+
+![image-20191030143224972](assets/image-20191030143224972.png)
+
+![image-20191030143320165](assets/image-20191030143320165.png)
+
+```
+上面的两个图的 rate值都是为 16bytes/s, 但是图的平滑性却存在差异
+如下的实际示例：
+```
+
+![image-20191030143444626](assets/image-20191030143444626.png)
+
+![image-20191030143507307](assets/image-20191030143507307.png)
+
+![image-20191030143720182](assets/image-20191030143720182.png)
+
+##### increase 函数
+
+![image-20191030144241408](assets/image-20191030144241408.png)
+
+![image-20191030144520063](assets/image-20191030144520063.png)
+
+![image-20191030144540721](assets/image-20191030144540721.png)
+
+```
+可以发现 increase函数的图形和 rate函数的图形的形状 是一致的
+但是纵坐标的 数值显示不一样，还可以发现使用rate的值 * 60s(1min) 可以得到increase的数值的显示
+```
+
+##### rate函数和increase函数使用的选择
+
+![image-20191030144959956](assets/image-20191030144959956.png)
+
+```
+主要是根据采集数据的频率来进行选择，因为 如果采集的数据采样周期较长，比如5min，在使用rate() 函数去计算每秒的数据，比较不精确，还可能会造成数据的断链。
+rate() 函数比较适合采集变化敏感的数据，如CPU，内存，磁盘IO，网络流量等
+```
+
+##### sum 函数
+
+![image-20191030145446715](assets/image-20191030145446715.png)
+
+![image-20191030144520063](assets/image-20191030144520063.png)
+
+![image-20191030145710392](assets/image-20191030145710392.png)
+
+```
+sum() 会把所有的数据进行加合
+```
+
+![image-20191030150018824](assets/image-20191030150018824.png)
+
+![image-20191030150144945](assets/image-20191030150144945.png)
+
+![image-20191030150244463](assets/image-20191030150244463.png)
+
+```
+三台机器的网络每秒增加量 加合
+```
+
+##### topk() 函数
+
+![image-20191030150741739](assets/image-20191030150741739.png)
+
+![image-20191030153832359](assets/image-20191030153832359.png)
+
+![image-20191030153954248](assets/image-20191030153954248.png)
+
+![image-20191030154105192](assets/image-20191030154105192.png)
+
+![image-20191030154939648](assets/image-20191030154939648.png)
+
+### 第九讲 企业级监控数据采集方法
+
+#### Prometheus 的启动配置
+
+```
+[root@node1 prometheus]# ./prometheus --help
+usage: prometheus [<flags>]
+
+The Prometheus monitoring server
+
+Flags:
+  -h, --help                     Show context-sensitive help (also try --help-long and --help-man).
+      --version                  Show application version.
+      --config.file="prometheus.yml"  
+                                 Prometheus configuration file path.
+      --web.listen-address="0.0.0.0:9090"  
+                                 Address to listen on for UI, API, and telemetry.
+      --web.read-timeout=5m      Maximum duration before timing out read of the request, and closing idle connections.
+      --web.max-connections=512  Maximum number of simultaneous connections.
+      --web.external-url=<URL>   The URL under which Prometheus is externally reachable (for example, if Prometheus is served via a reverse proxy). Used for generating
+                                 relative and absolute links back to Prometheus itself. If the URL has a path portion, it will be used to prefix all HTTP endpoints served
+                                 by Prometheus. If omitted, relevant URL components will be derived automatically.
+      --web.route-prefix=<path>  Prefix for the internal routes of web endpoints. Defaults to path of --web.external-url.
+      --web.user-assets=<path>   Path to static asset directory, available at /user.
+      --web.enable-lifecycle     Enable shutdown and reload via HTTP request.
+      --web.enable-admin-api     Enable API endpoints for admin control actions.
+      --web.console.templates="consoles"  
+                                 Path to the console template directory, available at /consoles.
+      --web.console.libraries="console_libraries"  
+                                 Path to the console library directory.
+      --web.page-title="Prometheus Time Series Collection and Processing Server"  
+                                 Document title of Prometheus instance.
+      --web.cors.origin=".*"     Regex for CORS origin. It is fully anchored. Example: 'https?://(domain1|domain2)\.com'
+      --storage.tsdb.path="data/"  
+                                 Base path for metrics storage.
+      --storage.tsdb.retention=STORAGE.TSDB.RETENTION  
+                                 [DEPRECATED] How long to retain samples in storage. This flag has been deprecated, use "storage.tsdb.retention.time" instead.
+      --storage.tsdb.retention.time=STORAGE.TSDB.RETENTION.TIME  
+                                 How long to retain samples in storage. When this flag is set it overrides "storage.tsdb.retention". If neither this flag nor
+                                 "storage.tsdb.retention" nor "storage.tsdb.retention.size" is set, the retention time defaults to 15d.
+      --storage.tsdb.retention.size=STORAGE.TSDB.RETENTION.SIZE  
+                                 [EXPERIMENTAL] Maximum number of bytes that can be stored for blocks. Units supported: KB, MB, GB, TB, PB. This flag is experimental and
+                                 can be changed in future releases.
+      --storage.tsdb.no-lockfile  
+                                 Do not create lockfile in data directory.
+      --storage.tsdb.allow-overlapping-blocks  
+                                 [EXPERIMENTAL] Allow overlapping blocks, which in turn enables vertical compaction and vertical query merge.
+      --storage.tsdb.wal-compression  
+                                 Compress the tsdb WAL.
+      --storage.remote.flush-deadline=<duration>  
+                                 How long to wait flushing sample on shutdown or config reload.
+      --storage.remote.read-sample-limit=5e7  
+                                 Maximum overall number of samples to return via the remote read interface, in a single query. 0 means no limit. This limit is ignored for
+                                 streamed response types.
+      --storage.remote.read-concurrent-limit=10  
+                                 Maximum number of concurrent remote read calls. 0 means no limit.
+      --storage.remote.read-max-bytes-in-frame=1048576  
+                                 Maximum number of bytes in a single frame for streaming remote read response types before marshalling. Note that client might have limit
+                                 on frame size as well. 1MB as recommended by protobuf by default.
+      --rules.alert.for-outage-tolerance=1h  
+                                 Max time to tolerate prometheus outage for restoring "for" state of alert.
+      --rules.alert.for-grace-period=10m  
+                                 Minimum duration between alert and restored "for" state. This is maintained only for alerts with configured "for" time greater than grace
+                                 period.
+      --rules.alert.resend-delay=1m  
+                                 Minimum amount of time to wait before resending an alert to Alertmanager.
+      --alertmanager.notification-queue-capacity=10000  
+                                 The capacity of the queue for pending Alertmanager notifications.
+      --alertmanager.timeout=10s  
+                                 Timeout for sending alerts to Alertmanager.
+      --query.lookback-delta=5m  The maximum lookback duration for retrieving metrics during expression evaluations.
+      --query.timeout=2m         Maximum time a query may take before being aborted.
+      --query.max-concurrency=20  
+                                 Maximum number of queries executed concurrently.
+      --query.max-samples=50000000  
+                                 Maximum number of samples a single query can load into memory. Note that queries will fail if they try to load more samples than this
+                                 into memory, so this also limits the number of samples a query can return.
+      --log.level=info           Only log messages with the given severity or above. One of: [debug, info, warn, error]
+      --log.format=logfmt        Output format of log messages. One of: [logfmt, json]
+```
+
+![image-20191030162738069](assets/image-20191030162738069.png)
+
+![image-20191030165802776](assets/image-20191030165802776.png)
+
+#### 使用supervisor 守护prometheus
+
+```
+[root@node1 supervisord.d]# cat prometheus.ini 
+[program:prometheus]
+user=root
+command=/usr/local/prometheus/prometheus --config.file=/usr/local/prometheus/prometheus.yml
+stdout_logfile=/var/log/supervisor/prometheus.log
+redirect_stderr=true
+stopasgroup=true
+killasgroup=true
+
+priority=1
+exitcodes=0
+stopwaitsecs=3
+startsecs=5
+autostart = true
+autorestart=true
+numprocs=1
+```
+
+```
+[root@node1 supervisord.d]# cat node_exporter.ini 
+[program:node_exporter]
+user=root
+command=/usr/local/node_exporter/node_exporter
+stdout_logfile=/var/log/supervisor/node_exporter.log
+redirect_stderr=true
+stopasgroup=true
+killasgroup=true
+
+priority=1
+exitcodes=0
+stopwaitsecs=3
+startsecs=5
+autostart = true
+autorestart=true
+numprocs=1
+```
+
+![image-20191030170008777](assets/image-20191030170008777.png)
+
+**开启node_exporter 不收集的参数**
+
+![image-20191030170832909](assets/image-20191030170832909.png)
+
+### 第十讲 企业监控数据采集脚本开发
+
+![image-20191030171424073](assets/image-20191030171424073.png)
+
+#### 安装配置pushgateway
+
+![image-20191030171632414](assets/image-20191030171632414.png)
+
+![image-20191030171747491](assets/image-20191030171747491.png)
+
+```
+scrape_configs:
+  # The job name is added as a label `job=<job_name>` to any timeseries scraped from this config.
+  - job_name: 'prometheus'
+
+    # metrics_path defaults to '/metrics'
+    # scheme defaults to 'http'.
+
+    static_configs:
+    - targets: ['localhost:9090']
+
+  - job_name: 'node1'
+    static_configs:
+    - targets: ['192.168.1.213:9100']
+  - job_name: 'node2'
+    static_configs:
+    - targets: ['192.168.1.214:9100']
+  - job_name: 'node3'
+    static_configs:
+    - targets: ['192.168.1.215:9100']
+  - job_name: 'pushgateway'
+    static_configs:
+    - targets: ['192.168.1.214:9100','192.168.1.215:9100']   
+```
+
+#### 自定义pushgateway脚本
+
+![image-20191030173229592](assets/image-20191030173229592.png)
+
+![image-20191030181948255](assets/image-20191030181948255.png)
+
+![image-20191030182513590](assets/image-20191030182513590.png)
+
+![image-20191030182800087](assets/image-20191030182800087.png)
+
+### 第十一讲 Prometheus 之 exporter模块源码示例
+
+#### 编写exporter的流程
+
+![image-20191031090037651](assets/image-20191031090037651.png)
+
