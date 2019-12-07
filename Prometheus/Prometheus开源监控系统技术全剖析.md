@@ -633,3 +633,117 @@ scrape_configs:
 
 ![image-20191031090037651](assets/image-20191031090037651.png)
 
+```
+还有一点就是通过调用http返回的数据必须是 以时间序列的 kv 数据，values 必须为 int、float 类型，不能为string类型，不然prometheus不能识别，则会使nil
+```
+
+#### exporter 源码示例
+
+![image-20191101132546542](assets/image-20191101132546542.png)
+
+```
+import 所使用到的包
+```
+
+![image-20191101132646553](assets/image-20191101132646553.png)
+
+```
+const namespace 定义了一个命名空间
+定义监控 metrics 的变量
+```
+
+![image-20191120135057559](assets/image-20191120135057559.png)
+
+```
+Exporter的成员函数，在prometheus 进行抓取的时候提供数据给prometheus的
+```
+
+![image-20191120135233904](assets/image-20191120135233904.png)
+
+```
+示例话Exporter的时候，构造Exporter的数据结构体
+```
+
+![image-20191120135710281](assets/image-20191120135710281.png)
+
+### 第十二讲 grafana 超实用企业监控绘图工具结合
+
+![image-20191120145710106](assets/image-20191120145710106.png)
+
+```
+报警配置
+```
+
+### 第十三讲 Prometheus企业级实际使用（一）
+
+![image-20191120150737056](assets/image-20191120150737056.png)
+
+![image-20191120154257590](assets/image-20191120154257590.png)
+
+```
+iowait 
+```
+
+![image-20191120154825554](assets/image-20191120154825554.png)
+
+```
+内存可用量
+```
+
+![image-20191120154946668](assets/image-20191120154946668.png)
+
+```
+磁盘使用量
+```
+
+![image-20191120155603338](assets/image-20191120155603338.png)
+
+```
+predict_linear() 函数 对曲线的变化率进行计算
+```
+
+![image-20191120155735179](assets/image-20191120155735179.png)
+
+```
+硬盘IO
+```
+
+![image-20191120155941884](assets/image-20191120155941884.png)
+
+```
+网络传输
+```
+
+### 第十三讲 Prometheus企业级实际使用（二）
+
+![image-20191120160143650](assets/image-20191120160143650.png)
+
+```
+tcp wait数量
+```
+
+![image-20191120161755705](assets/image-20191120161755705.png)
+
+```
+文件描述符的使用率
+```
+
+![image-20191120162414847](assets/image-20191120162414847.png)
+
+![image-20191120163920477](assets/image-20191120163920477.png)
+
+```
+[root@elk-logstash conf.d]# ping -q -A -s 500 -W 1000 -c 100 172.17.122.21
+PING 172.17.122.21 (172.17.122.21) 500(528) bytes of data.
+
+--- 172.17.122.21 ping statistics ---
+100 packets transmitted, 100 received, 0% packet loss, time 0ms
+rtt min/avg/max/mdev = 0.002/0.002/0.017/0.002 ms, ipg/ewma 0.006/0.002 ms
+```
+
+![image-20191120164124333](assets/image-20191120164124333.png)
+
+```
+smokeping 
+```
+
