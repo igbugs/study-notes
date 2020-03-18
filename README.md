@@ -25,6 +25,13 @@
 - MySQL
 - postgreSQL
 - MongoDB
+- TiDBs
+
+### 时序数据库
+
+- influxdb
+- opentsdb
+- M3DB
 
 ### 消息队列
 
@@ -60,6 +67,7 @@
 - zipkin
 - PinPoint
 - SkyWalking
+- jaeger
 
 ### 协议
 
@@ -102,7 +110,7 @@
 
 - gitlab
 - jenkins
-- 
+- Drone
 
 ### 安全
 
