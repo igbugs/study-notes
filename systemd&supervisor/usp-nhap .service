@@ -1,0 +1,28 @@
+[Unit]
+Description=usp-nhap tomcat
+After=syslog.target network.target remote-fs.target nss-lookup.target
+ 
+[Service]
+User=huohe
+Group=huohe
+Type=forking
+Environment=JAVA_HOME=/usr/local/software/jdk1.8.0_60
+Environment=JRE_HOME=${JAVA_HOME}/jre
+PIDFile=/alidata/projects/usp-nhap/Atomcat/tomcat.pid
+ExecStartPre=/alidata/projects/usp-nhap/b.sh
+ExecStart=/alidata/projects/usp-nhap/Atomcat/bin/startup.sh 
+ExecStartPost=/alidata/projects/usp-nhap/a.sh
+ExecReload=/bin/kill -s HUP $MAINPID
+ExecStop=/bin/kill -s QUIT $MAINPID
+PrivateTmp=true
+
+Restart=always 
+RestartSec=2
+TimeoutSec=15
+
+LimitCORE=infinity
+LimitNOFILE=655350
+LimitNPROC=65535
+
+[Install]
+WantedBy=multi-user.target
